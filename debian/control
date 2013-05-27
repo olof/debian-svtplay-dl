@@ -1,0 +1,20 @@
+Source: svtplay-dl
+Section: utils
+Priority: optional
+Maintainer: Olof Johansson <olof@ethup.se>
+Standards-Version: 3.9.5
+Build-Depends: debhelper (>= 9), zip, perl,
+               python (>= 2.6.6-3~), python-nose, python-mock
+Homepage: https://github.com/spaam/svtplay-dl
+Vcs-Git: git://github.com/olof/debian-svtplay-dl.git
+Vcs-Browser: https://github.com/olof/debian-svtplay-dl
+
+Package: svtplay-dl
+Depends: rtmpdump (>= 2.4), python, python-crypto,
+         ${misc:Depends}, ${python:Depends}
+Architecture: all
+Description: program to download videos from video on demand sites
+ svtplay-dl is a command line application for downloading videos
+ from various video on demand sites (sometimes called "play"
+ services). Currently supports some 15+ service, including
+ SVTPlay, HBO, twitch.tv, vimeo and many more.
