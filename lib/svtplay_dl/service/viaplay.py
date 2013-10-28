@@ -29,6 +29,12 @@ class Viaplay(Service):
         options.other = ""
         data = get_http_data(url)
         xml = ET.XML(data)
+        live = xml.find("Product").find("LiveInfo")
+        if live is not None:
+            live = live.find("Live").text
+            if live == "true":
+                options.live = True
+
         filename = xml.find("Product").find("Videos").find("Video").find("Url").text
         subtitle = xml.find("Product").find("SamiFile").text
 
@@ -37,7 +43,7 @@ class Viaplay(Service):
             xml = ET.XML(data)
             filename = xml.find("Url").text
 
-        options.other = "-W http://flvplayer.viastream.viasat.tv/play/swf/player110516.swf?rnd=1315434062"
+        options.other = "-W http://flvplayer.viastream.viasat.tv/flvplayer/play/swf/player.swf"
         download_rtmp(options, filename)
         if options.subtitle and subtitle:
             if options.output != "-":

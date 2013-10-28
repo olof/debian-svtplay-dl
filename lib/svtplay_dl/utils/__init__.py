@@ -123,11 +123,11 @@ def norm(name):
     else:
         return name
 
-def subtitle_tt(options, data):
+def subtitle_tt(options, subtitle):
     i = 1
     data = ""
     skip = False
-    tree = ET.parse(data)
+    tree = ET.ElementTree(ET.fromstring(subtitle))
     for node in tree.iter():
         tag = norm(node.tag)
         if tag == "p":
@@ -146,6 +146,8 @@ def subtitle_tt(options, data):
         options.output = "%s.srt" % filename.group(1)
     log.info("Subtitle: %s", options.output)
     fd = open(options.output, "w")
+    if sys.version_info < (3, 0):
+        data = data.encode('utf8')
     fd.write(data)
     fd.close()
 
@@ -170,20 +172,25 @@ def subtitle_sami(options, data):
     tree = ET.XML(data)
     subt = tree.find("Font")
     subs = ""
+    n = 0
     for i in subt.getiterator():
         if i.tag == "Subtitle":
-            if i.attrib["SpotNumber"] == 1:
+            n = i.attrib["SpotNumber"]
+            if i.attrib["SpotNumber"] == "1":
                 subs += "%s\n%s --> %s\n" % (i.attrib["SpotNumber"], i.attrib["TimeIn"], i.attrib["TimeOut"])
             else:
                 subs += "\n%s\n%s --> %s\n" % (i.attrib["SpotNumber"], i.attrib["TimeIn"], i.attrib["TimeOut"])
         else:
-            subs += "%s\n" % i.text
+            if n > 0:
+                subs += "%s\n" % i.text
 
     filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
     if filename:
         options.output = "%s.srt" % filename.group(1)
     log.info("Subtitle: %s", options.output)
     fd = open(options.output, "w")
+    if sys.version_info < (3, 0):
+        subs = subs.encode('utf8')
     fd.write(subs)
     fd.close()
 
@@ -191,7 +198,7 @@ def subtitle_smi(options, data):
     recomp = re.compile(r'<SYNC Start=(\d+)>\s+<P Class=\w+>(.*)<br>\s+<SYNC Start=(\d+)>\s+<P Class=\w+>', re.M|re.I|re.U)
     number = 1
     subs = ""
-    for i in recomp.finditer(data):
+    for i in recomp.finditer(str(data)):
         subs += "%s\n%s --> %s\n" % (number, timestr(i.group(1)), timestr(i.group(3)))
         text = "%s\n\n" % i.group(2)
         subs += text.replace("<br>", "\n")
