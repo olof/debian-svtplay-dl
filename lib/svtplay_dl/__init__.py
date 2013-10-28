@@ -12,7 +12,7 @@ from svtplay_dl.utils import get_http_data
 from svtplay_dl.service import service_handler, Generic
 
 
-__version__ = "0.9.2013.09.03"
+__version__ = "0.9.2013.10.08"
 
 class Options:
     """
@@ -50,10 +50,11 @@ class Options:
         self.password = None
 
 def get_media(url, options):
-    stream = service_handler(url)
-    if not stream:
-        url, stream = Generic().get(url)
+    url, stream = Generic().get(url)
+    if stream:
         url = url.replace("&amp;", "&")
+    if not stream:
+        stream = service_handler(url)
     if not stream:
         log.error("That site is not supported. Make a ticket or send a message")
         sys.exit(2)

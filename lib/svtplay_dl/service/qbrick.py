@@ -15,7 +15,7 @@ class Qbrick(Service):
         return ("dn.se" in url) or ("di.se" in url) or ("svd.se" in url) or ("sydsvenskan.se" in url)
 
     def get(self, options, url):
-        if re.findall(r"(dn.se|sydsvenskan.se)", url):
+        if re.findall(r"sydsvenskan.se", url):
             data = get_http_data(url)
             match = re.search(r"data-qbrick-mcid=\"([0-9A-F]+)\"", data)
             if not match:
@@ -35,6 +35,15 @@ class Qbrick(Service):
                 log.error("Can't find video file")
                 sys.exit(2)
             host = "http://vms.api.qbrick.com/rest/v3/getplayer/%s" % match.group(1)
+        elif re.findall(r"dn.se", url):
+            data = get_http_data(url)
+            match = re.search(r"'([0-9A-F]{8})',", data)
+            if not match:
+                match = re.search(r"mediaId = '([0-9A-F]{8})';", data)
+                if not match:
+                    log.error("Can't find video file")
+                    sys.exit(2)
+            host = "http://vms.api.qbrick.com/rest/v3//getsingleplayer/%sDE1BA107?statusCode=xml" %  match.group(1)
         elif re.findall(r"svd.se", url):
             match = re.search(r"_([0-9]+)\.svd", url)
             if not match:
@@ -57,7 +66,9 @@ class Qbrick(Service):
         except AttributeError:
             log.error("Can't find video file")
             sys.exit(2)
-
+        live = xml.find("media").find("item").find("playlist").find("stream").attrib["isLive"]
+        if live == "true":
+            options.live = True
         data = get_http_data(url)
         xml = ET.XML(data)
         server = xml.find("head").find("meta").attrib["base"]
