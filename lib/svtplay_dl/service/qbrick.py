@@ -6,13 +6,12 @@ import re
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, select_quality
+from svtplay_dl.utils import get_http_data, select_quality, is_py2_old
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import download_rtmp
 
 class Qbrick(Service):
-    def handle(self, url):
-        return ("dn.se" in url) or ("di.se" in url) or ("svd.se" in url) or ("sydsvenskan.se" in url)
+    supported_domains = ['dn.se', 'di.se', 'svd.se', 'sydsvenskan.se']
 
     def get(self, options, url):
         if re.findall(r"sydsvenskan.se", url):
@@ -73,7 +72,7 @@ class Qbrick(Service):
         xml = ET.XML(data)
         server = xml.find("head").find("meta").attrib["base"]
         streams = xml.find("body").find("switch")
-        if sys.version_info < (2, 7):
+        if is_py2_old:
             sa = list(streams.getiterator("video"))
         else:
             sa = list(streams.iter("video"))

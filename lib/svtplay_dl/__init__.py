@@ -8,11 +8,11 @@ import logging
 from optparse import OptionParser
 
 from svtplay_dl.log import log
-from svtplay_dl.utils import get_http_data
+from svtplay_dl.utils import get_http_data, is_py3, is_py2
 from svtplay_dl.service import service_handler, Generic
 
 
-__version__ = "0.9.2013.10.14"
+__version__ = "0.9.2014.01.18"
 
 class Options:
     """
@@ -41,7 +41,7 @@ class Options:
         self.resume = False
         self.live = False
         self.silent = False
-        self.quality = None
+        self.quality = 0
         self.flexibleq = None
         self.hls = False
         self.other = None
@@ -63,18 +63,17 @@ def get_media(url, options):
         data = get_http_data(url)
         match = re.search(r"(?i)<title.*>\s*(.*?)\s*</title>", data)
         if match:
-            if sys.version_info > (3, 0):
-                title = re.sub(r'[^\w\s-]', '', match.group(1)).strip().lower()
-                if options.output:
-                    options.output = options.output + re.sub(r'[-\s]+', '-', title)
-                else:
-                    options.output = re.sub(r'[-\s]+', '-', title)
+            title_tag = re.sub(r'&[^\s]*;', '', match.group(1))
+            if is_py3:
+                title = re.sub(r'[^\w\s-]', '', title_tag).strip().lower()
+                tmp = re.sub(r'[-\s]+', '-', title)
             else:
-                title = unicode(re.sub(r'[^\w\s-]', '', match.group(1)).strip().lower())
-                if options.output:
-                    options.output = unicode(options.output + re.sub(r'[-\s]+', '-', title))
-                else:
-                    options.output = unicode(re.sub(r'[-\s]+', '-', title))
+                title = unicode(re.sub(r'[^\w\s-]', '', title_tag).strip().lower())
+                tmp = unicode(re.sub(r'[-\s]+', '-', title))
+            if options.output and os.path.isdir(options.output):
+                options.output += "/%s" % tmp
+            else:
+                options.output = tmp
 
     stream.get(options, url)
 

@@ -4,14 +4,13 @@ import re
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, select_quality
+from svtplay_dl.utils import get_http_data, select_quality, is_py2_old
 from svtplay_dl.fetcher.http import download_http
 
 from svtplay_dl.log import log
 
 class Mtvservices(Service):
-    def handle(self, url):
-        return ("colbertnation.com" in url) or ("www.thedailyshow.com" in url)
+    supported_domains = ['colbertnation.com', 'thedailyshow.com']
 
     def get(self, options, url):
         data = get_http_data(url)
@@ -25,7 +24,7 @@ class Mtvservices(Service):
         data = data[start:]
         xml = ET.XML(data)
         ss = xml.find("video").find("item")
-        if sys.version_info < (2, 7):
+        if is_py2_old:
             sa = list(ss.getiterator("rendition"))
         else:
             sa = list(ss.iter("rendition"))
@@ -33,7 +32,7 @@ class Mtvservices(Service):
         for i in sa:
             streams[int(i.attrib["height"])] = i.find("src").text
         if len(streams) == 0:
-            log.error("Can't find video file: %s" % ss.text)
+            log.error("Can't find video file: %s", ss.text)
             sys.exit(2)
         stream = select_quality(options, streams)
         temp = stream.index("gsp.comedystor")

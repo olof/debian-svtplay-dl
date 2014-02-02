@@ -4,9 +4,9 @@ from __future__ import absolute_import
 import subprocess
 import re
 import shlex
-import sys
 
 from svtplay_dl.log import log
+from svtplay_dl.utils import is_py2
 
 def download_rtmp(options, url):
     """ Get the stream from RTMP """
@@ -20,11 +20,7 @@ def download_rtmp(options, url):
     extension = re.search(r"(\.[a-z0-9]+)$", url)
     if options.output != "-":
         if not extension:
-            extension = re.search(r"-y (.+):[-_a-z0-9\/]", options.other)
-            if not extension:
-                options.output = "%s.flv" % options.output
-            else:
-                options.output = "%s.%s" % (options.output, extension.group(1))
+            options.output = "%s.flv" % options.output
         else:
             options.output = options.output + extension.group(1)
         log.info("Outfile: %s", options.output)
@@ -32,7 +28,7 @@ def download_rtmp(options, url):
     if options.silent or options.output == "-":
         args.append("-q")
     if options.other:
-        if sys.version_info < (3, 0):
+        if is_py2:
             args += shlex.split(options.other.encode("utf-8"))
         else:
             args += shlex.split(options.other)

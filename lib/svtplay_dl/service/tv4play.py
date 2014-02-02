@@ -7,14 +7,13 @@ import xml.etree.ElementTree as ET
 
 from svtplay_dl.utils.urllib import urlparse, parse_qs
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, select_quality, subtitle_smi
+from svtplay_dl.utils import get_http_data, select_quality, subtitle_smi, is_py2_old
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import download_rtmp
 from svtplay_dl.fetcher.hds import download_hds
 
 class Tv4play(Service):
-    def handle(self, url):
-        return ("tv4play.se" in url) or ("tv4.se" in url)
+    supported_domains = ['tv4play.se', 'tv4.se']
 
     def get(self, options, url):
         parse = urlparse(url)
@@ -41,7 +40,7 @@ class Tv4play(Service):
         data = get_http_data(url)
         xml = ET.XML(data)
         ss = xml.find("items")
-        if sys.version_info < (2, 7):
+        if is_py2_old:
             sa = list(ss.getiterator("item"))
         else:
             sa = list(ss.iter("item"))
@@ -54,14 +53,17 @@ class Tv4play(Service):
         subtitle = False
 
         for i in sa:
-            if i.find("mediaFormat").text != "smi":
+            if i.find("mediaFormat").text == "mp4":
                 stream = {}
                 stream["uri"] = i.find("base").text
                 stream["path"] = i.find("url").text
                 streams[int(i.find("bitrate").text)] = stream
             elif i.find("mediaFormat").text == "smi":
                 subtitle = i.find("url").text
-        if len(streams) == 1:
+        if len(streams) == 0:
+            log.error("Can't find any streams")
+            sys.exit(2)
+        elif len(streams) == 1:
             test = streams[list(streams.keys())[0]]
         else:
             test = select_quality(options, streams)

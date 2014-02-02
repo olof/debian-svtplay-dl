@@ -11,14 +11,18 @@ import xml.etree.ElementTree as ET
 
 from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, select_quality, check_redirect
+from svtplay_dl.utils import get_http_data, select_quality, check_redirect, is_py2_old
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import download_rtmp
 from svtplay_dl.fetcher.http import download_http
 
 class Justin(Service):
-    def handle(self, url):
-        return ("twitch.tv" in url) or ("justin.tv" in url)
+    # Justin and Twitch uses language subdomains, e.g. en.www.twitch.tv. They
+    # are usually two characters, but may have a country suffix as well (e.g.
+    # zh-tw, zh-cn and pt-br.
+    supported_domains_re = [
+        r'^(?:(?:[a-z]{2}-)?[a-z]{2}\.)?(www\.)?twitch\.tv$',
+        r'^(?:(?:[a-z]{2}-)?[a-z]{2}\.)?(www\.)?justin\.tv$']
 
     def get(self, options, url):
         parse = urlparse(url)
@@ -38,6 +42,7 @@ class Justin(Service):
                 match = re.search(r"embedSWF\(\"(.*)\", \"live", data)
                 if not match:
                     log.error("Can't find swf file.")
+                    sys.exit(2)
                 options.other = check_redirect(match.group(1))
                 url = "http://usher.justin.tv/find/%s.xml?type=any&p=2321" % user
                 options.live = True
@@ -45,7 +50,7 @@ class Justin(Service):
                 data = re.sub(r"<(\d+)", r"<_\g<1>", data)
                 data = re.sub(r"</(\d+)", r"</_\g<1>", data)
                 xml = ET.XML(data)
-                if sys.version_info < (2, 7):
+                if is_py2_old:
                     sa = list(xml)
                 else:
                     sa = list(xml)

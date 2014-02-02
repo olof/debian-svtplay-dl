@@ -16,8 +16,7 @@ from svtplay_dl.fetcher.http import download_http
 from svtplay_dl.log import log
 
 class Svtplay(Service):
-    def handle(self, url):
-        return ("svtplay.se" in url) or ("svt.se" in url) or ("oppetarkiv.se" in url)
+    supported_domains = ['svtplay.se', 'svt.se', 'oppetarkiv.se', 'beta.svtplay.se']
 
     def get(self, options, url):
         if re.findall("svt.se", url):
@@ -29,15 +28,13 @@ class Svtplay(Service):
             else:
                 log.error("Can't find video file")
                 sys.exit(2)
-        url = "%s?type=embed" % url
-        data = get_http_data(url)
 
-        match = re.search("value=\"(/(public)?(statiskt)?/swf(/video)?/svtplayer-[0-9\.a-f]+swf)\"", data)
-        swf = "http://www.svtplay.se%s" % match.group(1)
-        options.other = "-W %s" % swf
-
-        url = "%s&output=json&format=json" % url
-        data = json.loads(get_http_data(url))
+        pos = url.find("?")
+        if pos < 0:
+            dataurl = "%s?&output=json&format=json" % url
+        else:
+            dataurl = "%s&output=json&format=json" % url
+        data = json.loads(get_http_data(dataurl))
         if "live" in data["video"]:
             options.live = data["video"]["live"]
         else:
@@ -54,7 +51,7 @@ class Svtplay(Service):
                 stream = {}
                 stream["url"] = i["url"]
                 streams[int(i["bitrate"])] = stream
-            elif not options.hls and parse.path[len(parse.path)-3:] != "f4m" and i["url"][len(i["url"])-4:] != "m3u8":
+            elif not options.hls and parse.path[len(parse.path)-3:] != "f4m" and parse.path[len(parse.path)-4:] != "m3u8":
                 stream = {}
                 stream["url"] = i["url"]
                 streams[int(i["bitrate"])] = stream
@@ -77,11 +74,17 @@ class Svtplay(Service):
         else:
             test = select_quality(options, streams)
 
-        if test["url"][0:4] == "rtmp":
+        parse = urlparse(test["url"])
+        if parse.scheme == "rtmp":
+            embedurl = "%s?type=embed" % url
+            data = get_http_data(embedurl)
+            match = re.search(r"value=\"(/(public)?(statiskt)?/swf(/video)?/svtplayer-[0-9\.a-f]+swf)\"", data)
+            swf = "http://www.svtplay.se%s" % match.group(1)
+            options.other = "-W %s" % swf
             download_rtmp(options, test["url"])
         elif options.hls:
             download_hls(options, test["url"])
-        elif test["url"][len(test["url"])-3:len(test["url"])] == "f4m":
+        elif parse.path[len(parse.path)-3:] == "f4m":
             match = re.search(r"\/se\/secure\/", test["url"])
             if match:
                 log.error("This stream is encrypted. Use --hls option")

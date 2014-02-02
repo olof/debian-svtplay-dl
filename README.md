@@ -11,7 +11,7 @@ You can install it by running the following as root:
 
     python setup.py install
 
-If you have OS X and [Homebrew](http://mxcl.github.com/homebrew/)
+If you have OS X and [Homebrew](http://brew.sh/)
 you can install with:
 
     brew install svtplay-dl
@@ -37,12 +37,18 @@ This script works for:
 * sverigesradio.se
 * svtplay.se
 * sydsvenskan.se
-* tv4.se
+* tv10play.se
+* tv3play.dk
+* tv3play.ee
+* tv3play.lt
+* tv3play.lv
+* tv3play.no
 * tv3play.se
+* tv4.se
 * tv4play.se
 * tv6play.se
 * tv8play.se
-* tv10play.se
 * twitch.tv
 * ur.se
 * urplay.se
+* viasat4play.no

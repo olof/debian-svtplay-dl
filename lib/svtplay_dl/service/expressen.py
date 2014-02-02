@@ -6,15 +6,14 @@ import re
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, select_quality
+from svtplay_dl.utils import get_http_data, select_quality, is_py2_old
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import download_rtmp
 
 from svtplay_dl.utils.urllib import quote_plus
 
 class Expressen(Service):
-    def handle(self, url):
-        return "expressen.se" in url
+    supported_domains = ['expressen.se']
 
     def get(self, options, url):
         data = get_http_data(url)
@@ -27,7 +26,7 @@ class Expressen(Service):
         data = get_http_data(url)
         xml = ET.XML(data)
         ss = xml.find("vurls")
-        if sys.version_info < (2, 7):
+        if is_py2_old:
             sa = list(ss.getiterator("vurl"))
         else:
             sa = list(ss.iter("vurl"))

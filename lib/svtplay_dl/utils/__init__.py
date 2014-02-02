@@ -8,6 +8,10 @@ import re
 import xml.etree.ElementTree as ET
 import json
 
+is_py2 = (sys.version_info[0] == 2)
+is_py3 = (sys.version_info[0] == 3)
+is_py2_old = (sys.version_info < (2, 7))
+
 # Used for UA spoofing in get_http_data()
 FIREFOX_UA = 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-GB; rv:1.9.0.3) Gecko/2008092417 Firefox/3.0.3'
 
@@ -46,7 +50,7 @@ def get_http_data(url, header=None, data=None, useragent=FIREFOX_UA,
         for key, value in [head for head in header.items() if head[1]]:
             request.add_header(key, value)
     if data:
-	    request.add_data(data)
+        request.add_data(data)
 
     opener = build_opener(HTTPCookieProcessor(cookiejar))
 
@@ -54,16 +58,16 @@ def get_http_data(url, header=None, data=None, useragent=FIREFOX_UA,
         response = opener.open(request)
     except HTTPError as e:
         log.error("Something wrong with that url")
-        log.error("Error code: %s" % e.code)
+        log.error("Error code: %s", e.code)
         sys.exit(5)
     except URLError as e:
         log.error("Something wrong with that url")
-        log.error("Error code: %s" % e.reason)
+        log.error("Error code: %s", e.reason)
         sys.exit(5)
     except ValueError as e:
         log.error("Try adding http:// before the url")
         sys.exit(5)
-    if sys.version_info > (3, 0):
+    if is_py3:
         data = response.read()
         try:
             data = data.decode("utf-8")
@@ -126,12 +130,17 @@ def subtitle_tt(options, subtitle):
             if skip:
                 data = data + "\n"
             begin = node.attrib["begin"]
-            duration = node.attrib["dur"]
+            if not ("dur" in node.attrib):
+                duration = node.attrib["duration"]
+            else:
+                duration = node.attrib["dur"]
             if not ("end" in node.attrib):
                 begin2 = begin.split(":")
                 duration2 = duration.split(":")
                 sec = float(begin2[2]) + float(duration2[2])
                 end = "%02d:%02d:%06.3f" % (int(begin[0]), int(begin[1]), sec)
+            else:
+                end = node.attrib["end"]
             data += '%s\n%s --> %s\n' % (i, begin.replace(".",","), end.replace(".",","))
             data += '%s\n' % node.text.strip(' \t\n\r')
             skip = True
@@ -145,7 +154,7 @@ def subtitle_tt(options, subtitle):
         options.output = "%s.srt" % filename.group(1)
     log.info("Subtitle: %s", options.output)
     fd = open(options.output, "w")
-    if sys.version_info < (3, 0):
+    if is_py2:
         data = data.encode('utf8')
     fd.write(data)
     fd.close()
@@ -188,7 +197,7 @@ def subtitle_sami(options, data):
         options.output = "%s.srt" % filename.group(1)
     log.info("Subtitle: %s", options.output)
     fd = open(options.output, "w")
-    if sys.version_info < (3, 0):
+    if is_py2:
         subs = subs.encode('utf8')
     fd.write(subs)
     fd.close()

@@ -16,12 +16,14 @@ from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import download_rtmp
 
 class Viaplay(Service):
-    def handle(self, url):
-        return ("tv3play.se" in url) or ("tv6play.se" in url) or ("tv8play.se" in url) or ("tv10play.se" in url)
+    supported_domains = [
+        'tv3play.se', 'tv6play.se', 'tv8play.se', 'tv10play.se',
+        'tv3play.no', 'tv3play.dk', 'tv6play.no', 'viasat4play.no',
+        'tv3play.ee', 'tv3play.lv', 'tv3play.lt']
 
     def get(self, options, url):
         parse = urlparse(url)
-        match = re.search(r'\/play\/(.*)/?', parse.path)
+        match = re.search(r'\/play\/(\d+)/?', parse.path)
         if not match:
             log.error("Cant find video file")
             sys.exit(2)
@@ -44,7 +46,7 @@ class Viaplay(Service):
             filename = xml.find("Url").text
 
         parse = urlparse(filename)
-        match = re.search("^(/[a-z0-9]{0,5})/(.*)", parse.path)
+        match = re.search("^(/[a-z0-9]{0,20})/(.*)", parse.path)
         if not match:
             log.error("Somthing wrong with rtmpparse")
             sys.exit(2)
