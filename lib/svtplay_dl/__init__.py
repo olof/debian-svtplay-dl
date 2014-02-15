@@ -7,12 +7,13 @@ import os
 import logging
 from optparse import OptionParser
 
+from svtplay_dl.error import UIException
 from svtplay_dl.log import log
-from svtplay_dl.utils import get_http_data, is_py3, is_py2
+from svtplay_dl.utils import get_http_data, decode_html_entities, filenamify
 from svtplay_dl.service import service_handler, Generic
 
 
-__version__ = "0.9.2014.01.18"
+__version__ = "0.9.2014.02.15"
 
 class Options:
     """
@@ -41,6 +42,7 @@ class Options:
         self.resume = False
         self.live = False
         self.silent = False
+        self.force = False
         self.quality = 0
         self.flexibleq = None
         self.hls = False
@@ -48,8 +50,10 @@ class Options:
         self.subtitle = False
         self.username = None
         self.password = None
+        self.thumbnail = False
 
 def get_media(url, options):
+
     url, stream = Generic().get(url)
     if stream:
         url = url.replace("&amp;", "&")
@@ -61,31 +65,49 @@ def get_media(url, options):
 
     if not options.output or os.path.isdir(options.output):
         data = get_http_data(url)
-        match = re.search(r"(?i)<title.*>\s*(.*?)\s*</title>", data)
+        match = re.search(r"(?i)<title[^>]*>\s*(.*?)\s*</title>", data, re.S)
         if match:
-            title_tag = re.sub(r'&[^\s]*;', '', match.group(1))
-            if is_py3:
-                title = re.sub(r'[^\w\s-]', '', title_tag).strip().lower()
-                tmp = re.sub(r'[-\s]+', '-', title)
+            title_tag = decode_html_entities(match.group(1))
+            if not options.output:
+                options.output = filenamify(title_tag)
             else:
-                title = unicode(re.sub(r'[^\w\s-]', '', title_tag).strip().lower())
-                tmp = unicode(re.sub(r'[-\s]+', '-', title))
-            if options.output and os.path.isdir(options.output):
-                options.output += "/%s" % tmp
-            else:
-                options.output = tmp
+                # output is a directory
+                os.path.join(options.output, filenamify(title_tag))
 
-    stream.get(options, url)
+    try:
+        stream.get(options)
+    except UIException as e:
+        if options.verbose:
+            raise e
+        log.error(e.message)
+        sys.exit(2)
 
-def setup_log(silent):
+    if options.subtitle:
+        if options.output != "-":
+            stream.get_subtitle(options)
+    if options.thumbnail:
+        if hasattr(stream, "get_thumbnail"):
+            log.info("thumb requested")
+            if options.output != "-":
+                log.info("getting thumbnail")
+                stream.get_thumbnail(options)
+    else:
+        log.info("no thumb requested")
+
+
+def setup_log(silent, verbose=False):
+    fmt = logging.Formatter('%(levelname)s: %(message)s')
     if silent:
         stream = sys.stderr
         level = logging.WARNING
+    elif verbose:
+        stream = sys.stderr
+        level = logging.DEBUG
+        fmt = logging.Formatter('[%(created).3f] %(pathname)s/%(funcName)s: %(levelname)s %(message)s')
     else:
         stream = sys.stdout
         level = logging.INFO
 
-    fmt = logging.Formatter('%(levelname)s %(message)s')
     hdlr = logging.StreamHandler(stream)
     hdlr.setFormatter(fmt)
 
@@ -106,6 +128,10 @@ def main():
                       help="Enable for live streams")
     parser.add_option("-s", "--silent",
                       action="store_true", dest="silent", default=False)
+    parser.add_option("-v", "--verbose",
+                      action="store_true", dest="verbose", default=False)
+    parser.add_option("-f", "--force",
+                      action="store_true", dest="force", default=False)
     parser.add_option("-q", "--quality", default=0,
                       metavar="quality", help="Choose what format to download.\nIt will download the best format by default")
     parser.add_option("-Q", "--flexible-quality", default=0,
@@ -119,6 +145,9 @@ def main():
                       help="Username")
     parser.add_option("-p", "--password", default=None,
                       help="Password")
+    parser.add_option("-t", "--thumbnail",
+                      action="store_true", dest="thumbnail", default=False,
+                      help="Download thumbnail from the site if available.")
     (options, args) = parser.parse_args()
     if not args:
         parser.print_help()
@@ -126,7 +155,7 @@ def main():
     if len(args) != 1:
         parser.error("incorrect number of arguments")
 
-    setup_log(options.silent)
+    setup_log(options.silent, options.verbose)
 
     if options.flexibleq and not options.quality:
         log.error("flexible-quality requires a quality")

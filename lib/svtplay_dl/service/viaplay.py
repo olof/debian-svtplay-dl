@@ -10,20 +10,24 @@ import re
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.utils.urllib import urlparse
-from svtplay_dl.service import Service
+from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.utils import get_http_data, subtitle_sami
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import download_rtmp
 
-class Viaplay(Service):
+class Viaplay(Service, OpenGraphThumbMixin):
     supported_domains = [
         'tv3play.se', 'tv6play.se', 'tv8play.se', 'tv10play.se',
         'tv3play.no', 'tv3play.dk', 'tv6play.no', 'viasat4play.no',
-        'tv3play.ee', 'tv3play.lv', 'tv3play.lt']
+        'tv3play.ee', 'tv3play.lv', 'tv3play.lt', 'tvplay.lv']
 
-    def get(self, options, url):
-        parse = urlparse(url)
-        match = re.search(r'\/play\/(\d+)/?', parse.path)
+    def __init__(self, url):
+        Service.__init__(self, url)
+        self.subtitle = None
+
+    def get(self, options):
+        parse = urlparse(self.url)
+        match = re.search(r'\/(\d+)/?', parse.path)
         if not match:
             log.error("Cant find video file")
             sys.exit(2)
@@ -36,14 +40,19 @@ class Viaplay(Service):
             live = live.find("Live").text
             if live == "true":
                 options.live = True
-
+        if xml.find("Product").find("Syndicate").text == "true":
+            options.live = True
         filename = xml.find("Product").find("Videos").find("Video").find("Url").text
-        subtitle = xml.find("Product").find("SamiFile").text
+        self.subtitle = xml.find("Product").find("SamiFile").text
 
         if filename[:4] == "http":
             data = get_http_data(filename)
             xml = ET.XML(data)
             filename = xml.find("Url").text
+            if xml.find("Msg").text:
+                log.error("Can't download file:")
+                log.error(xml.find("Msg").text)
+                sys.exit(2)
 
         parse = urlparse(filename)
         match = re.search("^(/[a-z0-9]{0,20})/(.*)", parse.path)
@@ -54,7 +63,8 @@ class Viaplay(Service):
         path = "-y %s" % match.group(2)
         options.other = "-W http://flvplayer.viastream.viasat.tv/flvplayer/play/swf/player.swf %s" % path
         download_rtmp(options, filename)
-        if options.subtitle and subtitle:
-            if options.output != "-":
-                data = get_http_data(subtitle)
-                subtitle_sami(options, data)
+
+    def get_subtitle(self, options):
+        if self.subtitle:
+            data = get_http_data(self.subtitle)
+            subtitle_sami(options, data)

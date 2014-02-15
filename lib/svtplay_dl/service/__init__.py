@@ -3,29 +3,57 @@
 from __future__ import absolute_import
 import re
 from svtplay_dl.utils.urllib import urlparse
+from svtplay_dl.utils import download_thumbnail
+import logging
+
+log = logging.getLogger('svtplay_dl')
 
 class Service(object):
     supported_domains = []
     supported_domains_re = []
 
-    def handles(self, url):
+    def __init__(self, url):
+        self.url = url
+
+    @classmethod
+    def handles(cls, url):
         urlp = urlparse(url)
 
         # Apply supported_domains_re regexp to the netloc. This
         # is meant for 'dynamic' domains, e.g. containing country
         # information etc.
-        for domain_re in [re.compile(x) for x in self.supported_domains_re]:
+        for domain_re in [re.compile(x) for x in cls.supported_domains_re]:
             if domain_re.match(urlp.netloc):
                 return True
 
-        if urlp.netloc in self.supported_domains:
+        if urlp.netloc in cls.supported_domains:
             return True
 
         # For every listed domain, try with www. subdomain as well.
-        if urlp.netloc in ['www.'+x for x in self.supported_domains]:
+        if urlp.netloc in ['www.'+x for x in cls.supported_domains]:
             return True
 
         return False
+
+    def get_subtitle(self, options):
+        pass
+
+
+class OpenGraphThumbMixin(object):
+    """
+    Mix this into the service class to grab thumbnail from OpenGraph properties.
+    """
+    def get_thumbnail(self, options):
+        data = get_http_data(self.url)
+        match = re.search(r'<meta property="og:image" content="([^"]*)"', data)
+        if match is None:
+            match = re.search(r'<meta content="([^"]*)" property="og:image"', data)
+            if match is None:
+                match = re.search(r'<meta name="og:image" property="og:image" content="([^"]*)" />', data)
+                if match is None:
+                    return
+        download_thumbnail(options, match.group(1))
+
 
 from svtplay_dl.service.aftonbladet import Aftonbladet
 from svtplay_dl.service.dr import Dr
@@ -44,26 +72,28 @@ from svtplay_dl.service.tv4play import Tv4play
 from svtplay_dl.service.urplay import Urplay
 from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
+from svtplay_dl.service.bambuser import Bambuser
 from svtplay_dl.utils import get_http_data
 
 sites = [
-    Aftonbladet(),
-    Dr(),
-    Expressen(),
-    Hbo(),
-    Justin(),
-    Kanal5(),
-    Mtvservices(),
-    Nrk(),
-    Qbrick(),
-    Ruv(),
-    Radioplay(),
-    Sr(),
-    Svtplay(),
-    Tv4play(),
-    Urplay(),
-    Viaplay(),
-    Vimeo()]
+    Aftonbladet,
+    Bambuser,
+    Dr,
+    Expressen,
+    Hbo,
+    Justin,
+    Kanal5,
+    Mtvservices,
+    Nrk,
+    Qbrick,
+    Ruv,
+    Radioplay,
+    Sr,
+    Svtplay,
+    Tv4play,
+    Urplay,
+    Viaplay,
+    Vimeo]
 
 
 class Generic(object):
@@ -76,19 +106,38 @@ class Generic(object):
             url = match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return url, i
+                    return url, i(url)
 
         match = re.search(r"src=\"(http://player.vimeo.com/video/[0-9]+)\" ", data)
         if match:
             for i in sites:
                 if i.handles(match.group(1)):
-                    return match.group(1), i
-        match = re.search(r"tv4video.swf\?vid=(\d+)", data)
+                    return match.group(1), i(url)
+        match = re.search(r"tv4play.se/iframe/video/(\d+)?", data)
         if match:
             url = "http://www.tv4play.se/?video_id=%s" % match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return url, i
+                    return url, i(url)
+        match = re.search(r"embed.bambuser.com/broadcast/(\d+)", data)
+        if match:
+            url = "http://bambuser.com/v/%s" % match.group(1)
+            for i in sites:
+                if i.handles(url):
+                    return url, i(url)
+        match = re.search(r'iframe src="(http://tv.aftonbladet[^"]*)"', data)
+        if match:
+            url = match.group(1)
+            for i in sites:
+                if i.handles(url):
+                    return url, i(url)
+        match = re.search(r"iframe src='(http://www.svtplay[^']*)'", data)
+        if match:
+            url = match.group(1)
+            for i in sites:
+                if i.handles(url):
+                    return url, i(url)
+
         return url, stream
 
 def service_handler(url):
@@ -96,7 +145,7 @@ def service_handler(url):
 
     for i in sites:
         if i.handles(url):
-            handler = i
+            handler = i(url)
             break
 
     return handler

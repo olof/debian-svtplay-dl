@@ -7,6 +7,12 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 import json
+import time
+import unicodedata
+try:
+    import HTMLParser
+except ImportError:
+    import html.parser as HTMLParser
 
 is_py2 = (sys.version_info[0] == 2)
 is_py3 = (sys.version_info[0] == 3)
@@ -41,6 +47,9 @@ def get_http_data(url, header=None, data=None, useragent=FIREFOX_UA,
     """ Get the page to parse it for streams """
     if not cookiejar:
         cookiejar = CookieJar()
+
+    log.debug("HTTP getting %r", url)
+    starttime = time.time()
 
     request = Request(url)
     standard_header = {'Referer': referer, 'User-Agent': useragent}
@@ -80,11 +89,18 @@ def get_http_data(url, header=None, data=None, useragent=FIREFOX_UA,
             log.error("Lost the connection to the server")
             sys.exit(5)
     response.close()
+
+    spent_time = time.time() - starttime
+    bps = 8 * len(data) / max(spent_time, 0.001)
+
+    log.debug("HTTP got %d bytes from %r in %.2fs (= %dbps)",
+              len(data), url, spent_time, bps)
+
     return data
 
 def check_redirect(url):
     opener = build_opener(NoRedirectHandler())
-    opener.addheaders += [('User-Agent', 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-GB; rv:1.9.0.3) Gecko/2008092417 Firefox/3.0.3')]
+    opener.addheaders += [('User-Agent', FIREFOX_UA)]
     response = opener.open(url)
     if response.code in (300, 301, 302, 303, 307):
         return response.headers["location"]
@@ -272,3 +288,59 @@ def select_quality(options, streams):
 
     return streams[selected]
 
+def ensure_unicode(s):
+    """
+    Ensure string is a unicode string. If it isn't it assumed it is
+    utf-8 and decodes it to a unicode string.
+    """
+    if (is_py2 and isinstance(s, str)) or (is_py3 and isinstance(s, bytes)):
+        s = s.decode('utf-8', 'replace')
+    return s
+
+def decode_html_entities(s):
+    """
+    Replaces html entities with the character they represent.
+
+        >>> print(decode_html_entities("&lt;3 &amp;"))
+        <3 &
+    """
+    parser = HTMLParser.HTMLParser()
+    def unesc(m):
+        return parser.unescape(m.group())
+    return re.sub(r'(&[^;]+;)', unesc, ensure_unicode(s))
+
+def filenamify(title):
+    """
+    Convert a string to something suitable as a file name.
+
+        >>> print(filenamify(u'Matlagning del 1 av 10 - R\xe4ksm\xf6rg\xe5s | SVT Play'))
+        matlagning-del-1-av-10-raksmorgas-svt-play
+
+    """
+    # ensure it is unicode
+    title = ensure_unicode(title)
+
+    # NFD decomposes chars into base char and diacritical mark, which means that we will get base char when we strip out non-ascii.
+    title = unicodedata.normalize('NFD', title)
+
+    # Drop any non ascii letters/digits
+    title = re.sub(r'[^a-zA-Z0-9 -]', '', title)
+    # Drop any leading/trailing whitespace that may have appeared
+    title = title.strip()
+    # Lowercase
+    title = title.lower()
+    # Replace whitespace with dash
+    title = re.sub(r'[-\s]+', '-', title)
+
+    return title
+
+def download_thumbnail(options, url):
+    data = get_http_data(url)
+
+    filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
+    tbn = "%s.tbn" % filename.group(1)
+    log.info("Thumbnail: %s", tbn)
+
+    fd = open(tbn, "wb")
+    fd.write(data)
+    fd.close()

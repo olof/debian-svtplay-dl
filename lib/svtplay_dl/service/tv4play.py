@@ -6,29 +6,33 @@ import re
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.utils.urllib import urlparse, parse_qs
-from svtplay_dl.service import Service
+from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.utils import get_http_data, select_quality, subtitle_smi, is_py2_old
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import download_rtmp
 from svtplay_dl.fetcher.hds import download_hds
 
-class Tv4play(Service):
+class Tv4play(Service, OpenGraphThumbMixin):
     supported_domains = ['tv4play.se', 'tv4.se']
 
-    def get(self, options, url):
-        parse = urlparse(url)
-        if "tv4play.se" in url:
+    def __init__(self, url):
+        Service.__init__(self, url)
+        self.subtitle = None
+
+    def get(self, options):
+        parse = urlparse(self.url)
+        if "tv4play.se" in self.url:
             try:
                 vid = parse_qs(parse[4])["video_id"][0]
             except KeyError:
                 log.error("Can't find video file")
                 sys.exit(2)
         else:
-            match = re.search(r"-(\d+)$", url)
+            match = re.search(r"-(\d+)$", self.url)
             if match:
                 vid = match.group(1)
             else:
-                data = get_http_data(url)
+                data = get_http_data(self.url)
                 match = re.search(r"\"vid\":\"(\d+)\",", data)
                 if match:
                     vid = match.group(1)
@@ -50,7 +54,6 @@ class Tv4play(Service):
                 options.live = True
 
         streams = {}
-        subtitle = False
 
         for i in sa:
             if i.find("mediaFormat").text == "mp4":
@@ -59,7 +62,8 @@ class Tv4play(Service):
                 stream["path"] = i.find("url").text
                 streams[int(i.find("bitrate").text)] = stream
             elif i.find("mediaFormat").text == "smi":
-                subtitle = i.find("url").text
+                self.subtitle = i.find("url").text
+
         if len(streams) == 0:
             log.error("Can't find any streams")
             sys.exit(2)
@@ -81,7 +85,9 @@ class Tv4play(Service):
                 sys.exit(2)
             manifest = "%s?hdcore=2.8.0&g=hejsan" % test["path"]
             download_hds(options, manifest)
-        if options.subtitle and subtitle:
-            data = get_http_data(subtitle)
-            subtitle_smi(options, data)
 
+
+    def get_subtitle(self, options):
+        if self.subtitle:
+            data = get_http_data(self.subtitle)
+            subtitle_smi(options, data)

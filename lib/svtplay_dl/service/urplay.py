@@ -5,31 +5,37 @@ import re
 import json
 import sys
 
-from svtplay_dl.service import Service
+from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.utils import get_http_data, subtitle_tt
 from svtplay_dl.fetcher.rtmp import download_rtmp
 from svtplay_dl.fetcher.hls import download_hls
 from svtplay_dl.log import log
 
-class Urplay(Service):
+class Urplay(Service, OpenGraphThumbMixin):
     supported_domains = ['urplay.se', 'ur.se']
 
-    def get(self, options, url):
-        data = get_http_data(url)
+    def __init__(self, url):
+        Service.__init__(self, url)
+        self.subtitle = None
+
+    def get(self, options):
+        data = get_http_data(self.url)
         match = re.search(r"urPlayer.init\((.*)\);", data)
         if not match:
             log.error("Can't find json info")
             sys.exit(2)
         data = match.group(1)
         jsondata = json.loads(data)
-        subtitle = jsondata["subtitles"].split(",")[0]
+        self.subtitle = jsondata["subtitles"].split(",")[0]
         basedomain = jsondata["streaming_config"]["streamer"]["redirect"]
         http = "http://%s/%s" % (basedomain, jsondata["file_html5"])
         hd = None
         if len(jsondata["file_html5_hd"]) > 0:
             http_hd = "http://%s/%s" % (basedomain, jsondata["file_html5_hd"])
             hls_hd = "%s%s" % (http_hd, jsondata["streaming_config"]["http_streaming"]["hls_file"])
-            path_hd = "mp%s:%s" % (jsondata["file_hd"][-1], jsondata["file_hd"])
+            tmp = jsondata["file_html5_hd"]
+            match = re.search(".*(mp[34]:.*$)", tmp)
+            path_hd = match.group(1)
             hd = True
         #hds = "%s%s" % (http, jsondata["streaming_config"]["http_streaming"]["hds_file"])
         hls = "%s%s" % (http, jsondata["streaming_config"]["http_streaming"]["hls_file"])
@@ -55,13 +61,9 @@ class Urplay(Service):
 
         options.other = "-v -a %s -y %s" % (jsondata["streaming_config"]["rtmp"]["application"], selected["rtmp"]["path"])
         if options.hls:
-            download_hls(options, selected["hls"]["playlist"], selected["hls"]["http"])
+            download_hls(options, selected["hls"]["playlist"])
         else:
             download_rtmp(options, selected["rtmp"]["server"])
-        if options.subtitle:
-            if options.output != "-":
-                data = get_http_data(subtitle)
-                subtitle_tt(options, data)
 
     def select_highest_quality(self, available):
         if 'hd' in available:
@@ -70,3 +72,9 @@ class Urplay(Service):
             return available["sd"]
         else:
             raise KeyError()
+
+
+    def get_subtitle(self, options):
+        if self.subtitle:
+            data = get_http_data(self.subtitle)
+            subtitle_tt(options, data)

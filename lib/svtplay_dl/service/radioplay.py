@@ -19,10 +19,10 @@ from svtplay_dl.log import log
 class Radioplay(Service):
     supported_domains = ['radioplay.se']
 
-    def get(self, options, url):
-        data = get_http_data(url)
+    def get(self, options):
+        data = get_http_data(self.url)
         match = re.search(r"liveStationsRedundancy = ({.*});</script>", data)
-        parse = urlparse(url)
+        parse = urlparse(self.url)
         station = parse.path[1:]
         streams = None
         if match:
@@ -38,8 +38,7 @@ class Radioplay(Service):
             if options.hls:
                 try:
                     m3u8_url = streams["hls"]
-                    base_url = m3u8_url.rsplit("/", 1)[0]
-                    download_hls(options, m3u8_url, base_url)
+                    download_hls(options, m3u8_url)
                 except KeyError:
                     log.error("Can't find any streams.")
                     sys.exit(2)

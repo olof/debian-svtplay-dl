@@ -5,17 +5,17 @@ import re
 import json
 import sys
 
-from svtplay_dl.service import Service
+from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.utils import get_http_data, select_quality
 from svtplay_dl.fetcher.rtmp import download_rtmp
 from svtplay_dl.fetcher.hls import download_hls
 from svtplay_dl.log import log
 
-class Dr(Service):
+class Dr(Service, OpenGraphThumbMixin):
     supported_domains = ['dr.dk']
 
-    def get(self, options, url):
-        data = get_http_data(url)
+    def get(self, options):
+        data = get_http_data(self.url)
         match = re.search(r'resource:[ ]*"([^"]*)",', data)
         if match:
             resource_url = match.group(1)
@@ -47,8 +47,7 @@ class Dr(Service):
                 test = select_quality(options, streams)
 
             if options.hls:
-                baseurl = test["uri"][0:test["uri"].rfind("/")]
-                download_hls(options, test["uri"], baseurl=baseurl)
+                download_hls(options, test["uri"])
             else:
                 options.other = "-y '%s'" % test["uri"].replace("rtmp://vod.dr.dk/cms/", "")
                 rtmp = "rtmp://vod.dr.dk/cms/"

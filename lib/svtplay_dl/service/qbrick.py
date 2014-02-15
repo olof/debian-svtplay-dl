@@ -5,25 +5,25 @@ import sys
 import re
 import xml.etree.ElementTree as ET
 
-from svtplay_dl.service import Service
+from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.utils import get_http_data, select_quality, is_py2_old
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import download_rtmp
 
-class Qbrick(Service):
+class Qbrick(Service, OpenGraphThumbMixin):
     supported_domains = ['dn.se', 'di.se', 'svd.se', 'sydsvenskan.se']
 
-    def get(self, options, url):
-        if re.findall(r"sydsvenskan.se", url):
-            data = get_http_data(url)
+    def get(self, options):
+        if re.findall(r"sydsvenskan.se", self.url):
+            data = get_http_data(self.url)
             match = re.search(r"data-qbrick-mcid=\"([0-9A-F]+)\"", data)
             if not match:
                 log.error("Can't find video file")
                 sys.exit(2)
             mcid = match.group(1)
             host = "http://vms.api.qbrick.com/rest/v3/getsingleplayer/%s" % mcid
-        elif re.findall(r"di.se", url):
-            data = get_http_data(url)
+        elif re.findall(r"di.se", self.url):
+            data = get_http_data(self.url)
             match = re.search("src=\"(http://qstream.*)\"></iframe", data)
             if not match:
                 log.error("Can't find video info")
@@ -34,8 +34,8 @@ class Qbrick(Service):
                 log.error("Can't find video file")
                 sys.exit(2)
             host = "http://vms.api.qbrick.com/rest/v3/getplayer/%s" % match.group(1)
-        elif re.findall(r"dn.se", url):
-            data = get_http_data(url)
+        elif re.findall(r"dn.se", self.url):
+            data = get_http_data(self.url)
             match = re.search(r"'([0-9A-F]{8})',", data)
             if not match:
                 match = re.search(r"mediaId = '([0-9A-F]{8})';", data)
@@ -43,8 +43,8 @@ class Qbrick(Service):
                     log.error("Can't find video file")
                     sys.exit(2)
             host = "http://vms.api.qbrick.com/rest/v3//getsingleplayer/%sDE1BA107?statusCode=xml" %  match.group(1)
-        elif re.findall(r"svd.se", url):
-            match = re.search(r"_([0-9]+)\.svd", url)
+        elif re.findall(r"svd.se", self.url):
+            match = re.search(r"_([0-9]+)\.svd", self.url)
             if not match:
                 log.error("Can't find video file")
                 sys.exit(2)
@@ -82,6 +82,6 @@ class Qbrick(Service):
 
         path = select_quality(options, streams)
 
-        options.other = "-y %s" % path
+        options.other = "-y '%s'" % path
         download_rtmp(options, server)
 
