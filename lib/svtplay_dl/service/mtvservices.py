@@ -1,3 +1,5 @@
+# ex:ts=4:sw=4:sts=4:et
+# -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
 import sys
 import re
@@ -13,8 +15,7 @@ class Mtvservices(Service):
     supported_domains = ['colbertnation.com', 'thedailyshow.com']
 
     def get(self, options):
-        data = get_http_data(self.url)
-        match = re.search(r"mgid=\"(mgid.*[0-9]+)\" data-wi", data)
+        match = re.search(r"mgid=\"(mgid.*[0-9]+)\" data-wi", self.get_urldata())
         if not match:
             log.error("Can't find video file")
             sys.exit(2)

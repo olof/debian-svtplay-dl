@@ -5,6 +5,8 @@ import sys
 import re
 import os
 import logging
+import copy
+import platform
 from optparse import OptionParser
 
 from svtplay_dl.error import UIException
@@ -13,7 +15,7 @@ from svtplay_dl.utils import get_http_data, decode_html_entities, filenamify
 from svtplay_dl.service import service_handler, Generic
 
 
-__version__ = "0.9.2014.02.15"
+__version__ = "0.9.2014.04.01"
 
 class Options:
     """
@@ -51,20 +53,41 @@ class Options:
         self.username = None
         self.password = None
         self.thumbnail = False
+        self.all_episodes = False
+        self.force_subtitle = False
 
 def get_media(url, options):
 
-    url, stream = Generic().get(url)
-    if stream:
-        url = url.replace("&amp;", "&")
+    stream = service_handler(url)
     if not stream:
-        stream = service_handler(url)
+        url, stream = Generic().get(url)
     if not stream:
         log.error("That site is not supported. Make a ticket or send a message")
         sys.exit(2)
 
+    if options.all_episodes:
+        if options.output and not os.path.isdir(options.output):
+            log.error("Output must be a directory if used with --all-episodes")
+            sys.exit(2)
+
+        episodes = stream.find_all_episodes(options)
+
+        for idx, o in enumerate(episodes):
+            if o == url:
+                substream = stream
+            else:
+                substream = service_handler(o)
+
+            log.info("Episode %d of %d", idx + 1, len(episodes))
+
+            # get_one_media overwrites options.output...
+            get_one_media(substream, copy.copy(options))
+    else:
+        get_one_media(stream, options)
+
+def get_one_media(stream, options):
     if not options.output or os.path.isdir(options.output):
-        data = get_http_data(url)
+        data = stream.get_urldata()
         match = re.search(r"(?i)<title[^>]*>\s*(.*?)\s*</title>", data, re.S)
         if match:
             title_tag = decode_html_entities(match.group(1))
@@ -72,7 +95,12 @@ def get_media(url, options):
                 options.output = filenamify(title_tag)
             else:
                 # output is a directory
-                os.path.join(options.output, filenamify(title_tag))
+                options.output = os.path.join(options.output, filenamify(title_tag))
+
+    if platform.system() == "Windows":
+        # ugly hack. replace \ with / or add extra \ because c:\test\kalle.flv will add c:_tab_est\kalle.flv
+        if options.output.find("\\") > 0:
+            options.output = options.output.replace("\\", "/")
 
     try:
         stream.get(options)
@@ -141,6 +169,8 @@ def main():
     parser.add_option("-S", "--subtitle",
                       action="store_true", dest="subtitle", default=False,
                       help="Download subtitle from the site if available.")
+    parser.add_option("--force-subtitle", dest="force_subtitle", default=False,
+                      action="store_true", help="Download only subtitle if its used with -S")
     parser.add_option("-u", "--username", default=None,
                       help="Username")
     parser.add_option("-p", "--password", default=None,
@@ -148,6 +178,9 @@ def main():
     parser.add_option("-t", "--thumbnail",
                       action="store_true", dest="thumbnail", default=False,
                       help="Download thumbnail from the site if available.")
+    parser.add_option("-A", "--all-episodes",
+                      action="store_true", dest="all_episodes", default=False,
+                      help="Try to download all episodes.")
     (options, args) = parser.parse_args()
     if not args:
         parser.print_help()

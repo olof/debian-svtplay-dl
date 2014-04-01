@@ -32,8 +32,7 @@ class Tv4play(Service, OpenGraphThumbMixin):
             if match:
                 vid = match.group(1)
             else:
-                data = get_http_data(self.url)
-                match = re.search(r"\"vid\":\"(\d+)\",", data)
+                match = re.search(r"\"vid\":\"(\d+)\",", self.get_urldata())
                 if match:
                     vid = match.group(1)
                 else:
@@ -75,6 +74,9 @@ class Tv4play(Service, OpenGraphThumbMixin):
         ## This is how we construct an swf uri, if we'll ever need one
         swf = "http://www.tv4play.se/flash/tv4playflashlets.swf"
         options.other = "-W %s -y %s" % (swf, test["path"])
+
+        if options.subtitle and options.force_subtitle:
+            return
 
         if test["uri"][0:4] == "rtmp":
             download_rtmp(options, test["uri"])

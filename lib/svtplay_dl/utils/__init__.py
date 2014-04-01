@@ -168,6 +168,9 @@ def subtitle_tt(options, subtitle):
     filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
     if filename:
         options.output = "%s.srt" % filename.group(1)
+    else:
+        options.output = "%s.srt" % options.output
+
     log.info("Subtitle: %s", options.output)
     fd = open(options.output, "w")
     if is_py2:
@@ -181,12 +184,15 @@ def subtitle_json(options, data):
     subs = ""
     for i in data:
         subs += "%s\n%s --> %s\n" % (number, timestr(int(i["startMillis"])), timestr(int(i["endMillis"])))
-        subs += "%s\n\n" % i["text"]
+        subs += "%s\n\n" % i["text"].encode("utf-8")
         number += 1
 
     filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
     if filename:
         options.output = "%s.srt" % filename.group(1)
+    else:
+        options.output = "%s.srt" % options.output
+
     log.info("Subtitle: %s", options.output)
     fd = open(options.output, "w")
     fd.write(subs)
@@ -205,12 +211,15 @@ def subtitle_sami(options, data):
             else:
                 subs += "\n%s\n%s --> %s\n" % (i.attrib["SpotNumber"], i.attrib["TimeIn"], i.attrib["TimeOut"])
         else:
-            if n > 0:
+            if int(n) > 0:
                 subs += "%s\n" % i.text
 
     filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
     if filename:
         options.output = "%s.srt" % filename.group(1)
+    else:
+        options.output = "%s.srt" % options.output
+
     log.info("Subtitle: %s", options.output)
     fd = open(options.output, "w")
     if is_py2:
@@ -231,6 +240,9 @@ def subtitle_smi(options, data):
     filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
     if filename:
         options.output = "%s.srt" % filename.group(1)
+    else:
+        options.output = "%s.srt" % options.output
+
     log.info("Subtitle: %s", options.output)
     fd = open(options.output, "w")
     fd.write(subs)
@@ -249,6 +261,9 @@ def subtitle_wsrt(options, data):
     filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
     if filename:
         options.output = "%s.srt" % filename.group(1)
+    else:
+        options.output = "%s.srt" % options.output
+
     log.info("Subtitle: %s", options.output)
     fd = open(options.output, "w")
     fd.write(srt)

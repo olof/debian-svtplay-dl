@@ -19,8 +19,7 @@ class Urplay(Service, OpenGraphThumbMixin):
         self.subtitle = None
 
     def get(self, options):
-        data = get_http_data(self.url)
-        match = re.search(r"urPlayer.init\((.*)\);", data)
+        match = re.search(r"urPlayer.init\((.*)\);", self.get_urldata())
         if not match:
             log.error("Can't find json info")
             sys.exit(2)
@@ -60,6 +59,10 @@ class Urplay(Service, OpenGraphThumbMixin):
                 sys.exit(4)
 
         options.other = "-v -a %s -y %s" % (jsondata["streaming_config"]["rtmp"]["application"], selected["rtmp"]["path"])
+
+        if options.subtitle and options.force_subtitle:
+            return
+
         if options.hls:
             download_hls(options, selected["hls"]["playlist"])
         else:

@@ -4,6 +4,7 @@ from __future__ import absolute_import
 import sys
 import re
 import json
+import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.utils import get_http_data, select_quality, subtitle_wsrt
@@ -24,8 +25,7 @@ class Svtplay(Service, OpenGraphThumbMixin):
 
     def get(self, options):
         if re.findall("svt.se", self.url):
-            data = get_http_data(self.url)
-            match = re.search(r"data-json-href=\"(.*)\"", data)
+            match = re.search(r"data-json-href=\"(.*)\"", self.get_urldata())
             if match:
                 filename = match.group(1).replace("&amp;", "&").replace("&format=json", "")
                 url = "http://www.svt.se%s" % filename
@@ -51,7 +51,6 @@ class Svtplay(Service, OpenGraphThumbMixin):
                 self.subtitle = data["video"]["subtitleReferences"][0]["url"]
             except (KeyError, NoneType):
                 pass
-
 
         streams = {}
         streams2 = {} #hack..
@@ -88,6 +87,9 @@ class Svtplay(Service, OpenGraphThumbMixin):
         else:
             test = select_quality(options, streams)
 
+        if options.subtitle and options.force_subtitle:
+            return
+
         parse = urlparse(test["url"])
         if parse.scheme == "rtmp":
             embedurl = "%s?type=embed" % url
@@ -114,3 +116,15 @@ class Svtplay(Service, OpenGraphThumbMixin):
             if options.output != "-":
                 data = get_http_data(self.subtitle)
                 subtitle_wsrt(options, data)
+
+
+    def find_all_episodes(self, options):
+        match = re.search(r'<link rel="alternate" type="application/rss\+xml" [^>]*href="([^"]+)"',
+                          self.get_urldata())
+        if match is None:
+            log.error("Couldn't retrieve episode list")
+            sys.exit(2)
+
+        xml = ET.XML(get_http_data(match.group(1)))
+
+        return sorted(x.text for x in xml.findall(".//item/link"))
