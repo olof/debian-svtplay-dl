@@ -16,11 +16,17 @@ you can install with:
 
     brew install svtplay-dl
 
+On Debian (Jessie and later), you can install it by running
+the following as root:
+
+    apt-get install svtplay-dl
+
 Support
 -------
 This script works for:
 
 * aftonbladet.se
+* bambuser.com
 * di.se
 * dn.se
 * dr.dk

@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# ex:ts=4:sw=4:sts=4:et
+# -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 import sys
 
 if __package__ is None and not hasattr(sys, "frozen"):
@@ -6,7 +8,10 @@ if __package__ is None and not hasattr(sys, "frozen"):
     import os.path
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import svtplay_dl
+try:
+    import svtplay_dl
 
-if __name__ == '__main__':
-    svtplay_dl.main()
+    if __name__ == '__main__':
+        svtplay_dl.main()
+except KeyboardInterrupt:
+    pass

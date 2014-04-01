@@ -12,8 +12,18 @@ class Service(object):
     supported_domains = []
     supported_domains_re = []
 
-    def __init__(self, url):
-        self.url = url
+    def __init__(self, _url):
+        self._url = _url
+        self._urldata = None
+
+    @property
+    def url(self):
+        return self._url
+
+    def get_urldata(self):
+        if self._urldata is None:
+            self._urldata = get_http_data(self.url)
+        return self._urldata
 
     @classmethod
     def handles(cls, url):
@@ -38,21 +48,41 @@ class Service(object):
     def get_subtitle(self, options):
         pass
 
+    # the options parameter is unused, but is part of the
+    # interface, so we don't want to remove it. Thus, the
+    # pylint ignore.
+    def find_all_episodes(self, options): # pylint: disable-msg=unused-argument
+        log.warning("--all-episodes not implemented for this service")
+        return [self.url]
+
+def opengraph_get(html, prop):
+    """
+    Extract specified OpenGraph property from html.
+
+        >>> opengraph_get('<html><head><meta property="og:image" content="http://example.com/img.jpg"><meta ...', "image")
+        'http://example.com/img.jpg'
+        >>> opengraph_get('<html><head><meta content="http://example.com/img2.jpg" property="og:image"><meta ...', "image")
+        'http://example.com/img2.jpg'
+        >>> opengraph_get('<html><head><meta name="og:image" property="og:image" content="http://example.com/img3.jpg"><meta ...', "image")
+        'http://example.com/img3.jpg'
+    """
+    match = re.search('<meta [^>]*property="og:' + prop + '" content="([^"]*)"', html)
+    if match is None:
+        match = re.search('<meta [^>]*content="([^"]*)" property="og:' + prop + '"', html)
+        if match is None:
+            return None
+    return match.group(1)
+
 
 class OpenGraphThumbMixin(object):
     """
     Mix this into the service class to grab thumbnail from OpenGraph properties.
     """
     def get_thumbnail(self, options):
-        data = get_http_data(self.url)
-        match = re.search(r'<meta property="og:image" content="([^"]*)"', data)
-        if match is None:
-            match = re.search(r'<meta content="([^"]*)" property="og:image"', data)
-            if match is None:
-                match = re.search(r'<meta name="og:image" property="og:image" content="([^"]*)" />', data)
-                if match is None:
-                    return
-        download_thumbnail(options, match.group(1))
+        url = opengraph_get(self.get_urldata(), "image")
+        if url is None:
+            return
+        download_thumbnail(options, url)
 
 
 from svtplay_dl.service.aftonbladet import Aftonbladet
@@ -64,6 +94,7 @@ from svtplay_dl.service.kanal5 import Kanal5
 from svtplay_dl.service.mtvservices import Mtvservices
 from svtplay_dl.service.nrk import Nrk
 from svtplay_dl.service.qbrick import Qbrick
+from svtplay_dl.service.picsearch import Picsearch
 from svtplay_dl.service.ruv import Ruv
 from svtplay_dl.service.radioplay import Radioplay
 from svtplay_dl.service.sr import Sr
@@ -86,6 +117,7 @@ sites = [
     Mtvservices,
     Nrk,
     Qbrick,
+    Picsearch,
     Ruv,
     Radioplay,
     Sr,
@@ -106,6 +138,7 @@ class Generic(object):
             url = match.group(1)
             for i in sites:
                 if i.handles(url):
+                    url = url.replace("&amp;", "&")
                     return url, i(url)
 
         match = re.search(r"src=\"(http://player.vimeo.com/video/[0-9]+)\" ", data)

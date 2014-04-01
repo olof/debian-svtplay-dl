@@ -32,7 +32,12 @@ def download_rtmp(options, url):
             args += shlex.split(options.other.encode("utf-8"))
         else:
             args += shlex.split(options.other)
+
+    if options.verbose:
+        args.append("-V")
+
     command = ["rtmpdump", "-r", url] + args
+    log.debug("Running: %s", " ".join(command))
     try:
         subprocess.call(command)
     except OSError as e:
