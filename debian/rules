@@ -6,5 +6,8 @@ export PREFIX=/usr
 # executable, to comform with Debian's Python policy (1.4.2).
 export PYTHON=/usr/bin/python
 
+export MAKEFLAGS=-e
+export TEST_OPTS=-2
+
 %:
 	dh $@ --with python2
