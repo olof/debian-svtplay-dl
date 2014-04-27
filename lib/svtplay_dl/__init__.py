@@ -15,7 +15,7 @@ from svtplay_dl.utils import get_http_data, decode_html_entities, filenamify
 from svtplay_dl.service import service_handler, Generic
 
 
-__version__ = "0.9.2014.04.01"
+__version__ = "0.9.2014.04.27"
 
 class Options:
     """
@@ -195,4 +195,8 @@ def main():
         sys.exit(4)
 
     url = args[0]
-    get_media(url, options)
+
+    try:
+        get_media(url, options)
+    except KeyboardInterrupt:
+        pass
