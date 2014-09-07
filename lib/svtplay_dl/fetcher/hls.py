@@ -5,11 +5,13 @@ import sys
 import os
 import re
 
-from svtplay_dl.utils import get_http_data, select_quality
-from svtplay_dl.output import progressbar, progress_stream, ETA
+from svtplay_dl.utils import get_http_data
+from svtplay_dl.output import progressbar, progress_stream, ETA, output
 from svtplay_dl.log import log
 from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.error import UIException
+from svtplay_dl.fetcher import VideoRetriever
+
 
 class HLSException(UIException):
     def __init__(self, url, message):
@@ -39,69 +41,68 @@ def _get_full_url(url, srcurl):
 
     return returl
 
-
-def download_hls(options, url):
+def hlsparse(url):
     data = get_http_data(url)
-    globaldata, files = parsem3u(data)
+    files = (parsem3u(data))[1]
     streams = {}
 
-    if options.live and not options.force:
-        raise LiveHLSException(url)
-
     for i in files:
-        streams[int(i[1]["BANDWIDTH"])] = i[0]
+        bitrate = float(i[1]["BANDWIDTH"])/1000
+        streams[int(bitrate)] = _get_full_url(i[0], url)
+    return streams
 
-    test = select_quality(options, streams)
-    test = _get_full_url(test, url)
+class HLS(VideoRetriever):
+    def name(self):
+        return "hls"
 
-    m3u8 = get_http_data(test)
-    globaldata, files = parsem3u(m3u8)
-    encrypted = False
-    key = None
-    try:
-        keydata = globaldata["KEY"]
-        encrypted = True
-    except KeyError:
-        pass
+    def download(self):
+        if self.options.live and not self.options.force:
+            raise LiveHLSException(self.url)
 
-    if encrypted:
+        m3u8 = get_http_data(self.url)
+        globaldata, files = parsem3u(m3u8)
+        encrypted = False
+        key = None
         try:
-            from Crypto.Cipher import AES
-        except ImportError:
-            log.error("You need to install pycrypto to download encrypted HLS streams")
-            sys.exit(2)
+            keydata = globaldata["KEY"]
+            encrypted = True
+        except KeyError:
+            pass
 
-        match = re.search(r'URI="(https?://.*?)"', keydata)
-        key = get_http_data(match.group(1))
-        rand = os.urandom(16)
-        decryptor = AES.new(key, AES.MODE_CBC, rand)
-    if options.output != "-":
-        extension = re.search(r"(\.[a-z0-9]+)$", options.output)
-        if not extension:
-            options.output = "%s.ts" % options.output
-        log.info("Outfile: %s", options.output)
-        file_d = open(options.output, "wb")
-    else:
-        file_d = sys.stdout
-
-    n = 0
-    eta = ETA(len(files))
-    for i in files:
-        item = _get_full_url(i[0], test)
-
-        if options.output != "-":
-            eta.increment()
-            progressbar(len(files), n, ''.join(['ETA: ', str(eta)]))
-            n += 1
-
-        data = get_http_data(item)
         if encrypted:
-            data = decryptor.decrypt(data)
-        file_d.write(data)
+            try:
+                from Crypto.Cipher import AES
+            except ImportError:
+                log.error("You need to install pycrypto to download encrypted HLS streams")
+                sys.exit(2)
 
-    if options.output != "-":
-        file_d.close()
-        progress_stream.write('\n')
+            match = re.search(r'URI="(https?://.*?)"', keydata)
+            key = get_http_data(match.group(1))
+            rand = os.urandom(16)
+            decryptor = AES.new(key, AES.MODE_CBC, rand)
+
+        file_d = output(self.options, self.options.output, "ts")
+        if hasattr(file_d, "read") is False:
+            return
+
+        n = 0
+        eta = ETA(len(files))
+        for i in files:
+            item = _get_full_url(i[0], self.url)
+
+            if self.options.output != "-":
+                eta.increment()
+                progressbar(len(files), n, ''.join(['ETA: ', str(eta)]))
+                n += 1
+
+            data = get_http_data(item)
+            if encrypted:
+                data = decryptor.decrypt(data)
+            file_d.write(data)
+
+        if self.options.output != "-":
+            file_d.close()
+            progress_stream.write('\n')
 
 def parsem3u(data):
     if not data.startswith("#EXTM3U"):
@@ -116,10 +117,12 @@ def parsem3u(data):
         if not l:
             continue
         if l.startswith("#EXT-X-STREAM-INF:"):
-            #not a proper parser
+            # not a proper parser
             info = [x.strip().split("=", 1) for x in l[18:].split(",")]
             for i in range(0, len(info)):
                 if info[i][0] == "BANDWIDTH":
+                    streaminfo.update({info[i][0]: info[i][1]})
+                if info[i][0] == "RESOLUTION":
                     streaminfo.update({info[i][0]: info[i][1]})
         elif l.startswith("#EXT-X-ENDLIST"):
             break

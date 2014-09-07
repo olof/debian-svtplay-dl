@@ -3,16 +3,17 @@
 from __future__ import absolute_import
 import sys
 import re
+import copy
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import get_http_data, select_quality, is_py2_old
+from svtplay_dl.utils import get_http_data, is_py2_old
 from svtplay_dl.utils.urllib import unquote_plus
 from svtplay_dl.log import log
-from svtplay_dl.fetcher.rtmp import download_rtmp
+from svtplay_dl.fetcher.rtmp import RTMP
 
 class Qbrick(Service, OpenGraphThumbMixin):
-    supported_domains = ['di.se', 'svd.se', 'sydsvenskan.se']
+    supported_domains = ['di.se', 'sydsvenskan.se']
 
     def get(self, options):
         if re.findall(r"sydsvenskan.se", self.url):
@@ -69,12 +70,7 @@ class Qbrick(Service, OpenGraphThumbMixin):
             sa = list(streams.getiterator("video"))
         else:
             sa = list(streams.iter("video"))
-        streams = {}
+
         for i in sa:
-            streams[int(i.attrib["system-bitrate"])] = i.attrib["src"]
-
-        path = select_quality(options, streams)
-
-        options.other = "-y '%s'" % path
-        download_rtmp(options, server)
-
+            options.other = "-y '%s'" % i.attrib["src"]
+            yield RTMP(copy.copy(options), server, i.attrib["system-bitrate"])

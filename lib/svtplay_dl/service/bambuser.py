@@ -4,12 +4,13 @@ from __future__ import absolute_import
 import sys
 import re
 import json
+import copy
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.utils import get_http_data
 from svtplay_dl.log import log
-from svtplay_dl.fetcher.rtmp import download_rtmp
-from svtplay_dl.fetcher.http import download_http
+from svtplay_dl.fetcher.rtmp import RTMP
+from svtplay_dl.fetcher.http import HTTP
 
 class Bambuser(Service, OpenGraphThumbMixin):
     supported_domains = ["bambuser.com"]
@@ -28,7 +29,7 @@ class Bambuser(Service, OpenGraphThumbMixin):
             options.other = "-y %s" % playpath
             if info["type"] == "live":
                 options.live = True
-            download_rtmp(options, video)
+            yield RTMP(copy.copy(options), video, "0")
         else:
-            download_http(options, video)
+            yield HTTP(copy.copy(options), video, "0")
 

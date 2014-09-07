@@ -9,18 +9,22 @@ import sys
 import re
 import xml.etree.ElementTree as ET
 import json
+import copy
 
 from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import get_http_data, subtitle_sami
+from svtplay_dl.utils import get_http_data
 from svtplay_dl.log import log
-from svtplay_dl.fetcher.rtmp import download_rtmp
+from svtplay_dl.fetcher.rtmp import RTMP
+from svtplay_dl.fetcher.hds import hdsparse
+from svtplay_dl.fetcher.hls import HLS, hlsparse
+from svtplay_dl.subtitle import subtitle_sami
 
 class Viaplay(Service, OpenGraphThumbMixin):
     supported_domains = [
         'tv3play.se', 'tv6play.se', 'tv8play.se', 'tv10play.se',
         'tv3play.no', 'tv3play.dk', 'tv6play.no', 'viasat4play.no',
-        'tv3play.ee', 'tv3play.lv', 'tv3play.lt', 'tvplay.lv']
+        'tv3play.ee', 'tv3play.lv', 'tv3play.lt', 'tvplay.lv', 'viagame.com']
 
     def __init__(self, url):
         Service.__init__(self, url)
@@ -34,18 +38,20 @@ class Viaplay(Service, OpenGraphThumbMixin):
         to scrape it from the HTML document. Returns None in case it's
         unable to extract the ID at all.
         """
-        parse = urlparse(self.url)
-        match = re.search(r'\/(\d+)/?', parse.path)
+        html_data = self.get_urldata()
+        match = re.search(r'data-video-id="([0-9]+)"', html_data)
+        if match:
+            return match.group(1)
+        match = re.search(r'data-videoid="([0-9]+)', html_data)
         if match:
             return match.group(1)
 
-        html_data = self.get_urldata()
-        match = re.search(r'data-link="[^"]+/([0-9]+)"', html_data)
+        parse = urlparse(self.url)
+        match = re.search(r'\/(\d+)/\?', parse.path)
         if match:
             return match.group(1)
 
         return None
-
 
     def get(self, options):
         vid = self._get_video_id()
@@ -62,37 +68,47 @@ class Viaplay(Service, OpenGraphThumbMixin):
             live = live.find("Live").text
             if live == "true":
                 options.live = True
-        if xml.find("Product").find("Syndicate").text == "true":
-            options.live = True
+
+        yield subtitle_sami(xml.find("Product").find("SamiFile").text)
+
+        # Fulhack.. expose error code from get_http_data.
         filename = xml.find("Product").find("Videos").find("Video").find("Url").text
-        self.subtitle = xml.find("Product").find("SamiFile").text
+        if filename[:4] != "rtmp":
+            if filename[len(filename)-3:] == "f4m":
+                filename = "%s?hdcore=2.8.0&g=hejsan" % filename
+            filedata = get_http_data(filename)
+            geoxml = ET.XML(filedata)
+            if geoxml.find("Success") is not None:
+                if geoxml.find("Success").text == "false":
+                    log.error("Can't download file:")
+                    log.error(xml.find("Msg").text)
+                    sys.exit(2)
 
-        if filename[:4] == "http":
-            data = get_http_data(filename)
-            xml = ET.XML(data)
-            filename = xml.find("Url").text
-            if xml.find("Msg").text:
-                log.error("Can't download file:")
-                log.error(xml.find("Msg").text)
-                sys.exit(2)
+        streams = get_http_data("http://playapi.mtgx.tv/v1/videos/stream/%s" % vid)
+        streamj = json.loads(streams)
 
-        parse = urlparse(filename)
-        match = re.search("^(/[a-z0-9]{0,20})/(.*)", parse.path)
-        if not match:
-            log.error("Somthing wrong with rtmpparse")
-            sys.exit(2)
-        filename = "%s://%s:%s%s" % (parse.scheme, parse.hostname, parse.port, match.group(1))
-        path = "-y %s" % match.group(2)
-        options.other = "-W http://flvplayer.viastream.viasat.tv/flvplayer/play/swf/player.swf %s" % path
-        if options.subtitle and options.force_subtitle:
-            return
+        if streamj["streams"]["medium"]:
+            filename = streamj["streams"]["medium"]
+            if filename[len(filename)-3:] == "f4m":
+                manifest = "%s?hdcore=2.8.0&g=hejsan" % filename
+                streams = hdsparse(copy.copy(options), manifest)
+                for n in list(streams.keys()):
+                    yield streams[n]
+            else:
+                parse = urlparse(filename)
+                match = re.search("^(/[^/]+)/(.*)", parse.path)
+                if not match:
+                    log.error("Somthing wrong with rtmpparse")
+                    sys.exit(2)
+                filename = "%s://%s:%s%s" % (parse.scheme, parse.hostname, parse.port, match.group(1))
+                path = "-y %s" % match.group(2)
+                options.other = "-W http://flvplayer.viastream.viasat.tv/flvplayer/play/swf/player.swf %s" % path
+                yield RTMP(copy.copy(options), filename, 800)
 
-        download_rtmp(options, filename)
-
-    def get_subtitle(self, options):
-        if self.subtitle:
-            data = get_http_data(self.subtitle)
-            subtitle_sami(options, data)
+        if streamj["streams"]["hls"]:
+            streams = hlsparse(streamj["streams"]["hls"])
+            for n in list(streams.keys()):
+                yield HLS(copy.copy(options), streams[n], n)
 
     def find_all_episodes(self, options):
         format_id = re.search(r'data-format-id="(\d+)"', self.get_urldata())

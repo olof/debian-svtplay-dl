@@ -4,11 +4,12 @@ from __future__ import absolute_import
 import sys
 import re
 import json
+import copy
 
 from svtplay_dl.service import Service
 from svtplay_dl.utils import get_http_data
 from svtplay_dl.log import log
-from svtplay_dl.fetcher.hls import download_hls
+from svtplay_dl.fetcher.hls import HLS
 
 class Aftonbladet(Service):
     supported_domains = ['tv.aftonbladet.se']
@@ -34,6 +35,17 @@ class Aftonbladet(Service):
 
         streamsurl = "http://aftonbladet-play-static-ext.cdn.drvideo.aptoma.no/actions/video/?id=%s&formats&callback=" % videoId
         streams = json.loads(get_http_data(streamsurl))
-        hls = streams["formats"]["hls"]["level3"]["m3u8"][0]
-        playlist = "http://%s/%s/%s" % (hls["address"], hls["path"], hls["filename"])
-        download_hls(options, playlist)
+        hlsstreams = streams["formats"]["hls"]
+        if "level3" in hlsstreams.keys():
+            hls = hlsstreams["level3"]["csmil"][0]
+        else:
+            hls = hlsstreams["akamai"]["m3u8"][0]
+        address = hls["address"]
+        path = hls["path"]
+
+        for i in hls["files"]:
+            if "filename" in i.keys():
+                playlist = "http://%s/%s/%s/master.m3u8" % (address, path, i["filename"])
+            else:
+                playlist = "http://%s/%s/%s/master.m3u8" % (address, path, hls["filename"])
+            yield HLS(copy.copy(options), playlist, i["bitrate"])
