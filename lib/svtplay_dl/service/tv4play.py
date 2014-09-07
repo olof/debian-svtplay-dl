@@ -33,15 +33,15 @@ class Tv4play(Service, OpenGraphThumbMixin):
                 log.error("Can't find video file")
                 sys.exit(2)
         else:
-            match = re.search(r"-(\d+)$", self.url)
+            match = re.search(r"\"vid\":\"(\d+)\",", self.get_urldata())
             if match:
                 vid = match.group(1)
             else:
-                match = re.search(r"\"vid\":\"(\d+)\",", self.get_urldata())
+                match = re.search(r"-(\d+)$", self.url)
                 if match:
                     vid = match.group(1)
                 else:
-                    log.error("Can't find video file")
+                    log.error("Can't find video id")
                     sys.exit(2)
 
         url = "http://premium.tv4play.se/api/web/asset/%s/play" % vid
@@ -107,7 +107,9 @@ class Tv4play(Service, OpenGraphThumbMixin):
 
     def find_all_episodes(self, options):
         parse =  urlparse(self.url)
-        show = quote_plus(parse.path[parse.path.find("/", 1)+1:])
+        show = parse.path[parse.path.find("/", 1)+1:]
+        if not re.search("%", show):
+            show = quote_plus(show)
         data = get_http_data("http://webapi.tv4play.se/play/video_assets?type=episode&is_live=false&platform=web&node_nids=%s&per_page=99999" % show)
         jsondata = json.loads(data)
         episodes = []
