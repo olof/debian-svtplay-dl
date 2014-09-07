@@ -1,18 +1,17 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import sys
 import base64
-import re
 import struct
 import logging
 import binascii
-
 import xml.etree.ElementTree as ET
 
-from svtplay_dl.output import progressbar, progress_stream, ETA
-from svtplay_dl.utils import get_http_data, select_quality, is_py2_old, is_py2, is_py3
+from svtplay_dl.output import progressbar, progress_stream, ETA, output
+from svtplay_dl.utils import get_http_data, is_py2_old, is_py2, is_py3
+from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.error import UIException
+from svtplay_dl.fetcher import VideoRetriever
 
 log = logging.getLogger('svtplay_dl')
 
@@ -40,15 +39,11 @@ class LiveHDSException(HDSException):
         super(LiveHDSException, self).__init__(
             url, "This is a live HDS stream, and they are not supported.")
 
-
-def download_hds(options, url):
-    data = get_http_data(url)
+def hdsparse(options, manifest):
+    data = get_http_data(manifest)
     streams = {}
     bootstrap = {}
     xml = ET.XML(data)
-
-    if options.live and not options.force:
-        raise LiveHDSException(url)
 
     if is_py2_old:
         bootstrapIter = xml.getiterator("{http://ns.adobe.com/f4m/1.0}bootstrapInfo")
@@ -59,51 +54,57 @@ def download_hds(options, url):
 
     for i in bootstrapIter:
         bootstrap[i.attrib["id"]] = i.text
-
+    parse = urlparse(manifest)
+    querystring = parse.query
     for i in mediaIter:
-        streams[int(i.attrib["bitrate"])] = {"url": i.attrib["url"], "bootstrapInfoId": i.attrib["bootstrapInfoId"], "metadata": i.find("{http://ns.adobe.com/f4m/1.0}metadata").text}
+        streams[int(i.attrib["bitrate"])] = HDS(options, i.attrib["url"], i.attrib["bitrate"], manifest=manifest, bootstrap=bootstrap[i.attrib["bootstrapInfoId"]],
+                                                metadata=i.find("{http://ns.adobe.com/f4m/1.0}metadata").text, querystring=querystring)
+    return streams
 
-    test = select_quality(options, streams)
+class HDS(VideoRetriever):
+    def name(self):
+        return "hds"
 
-    bootstrap = base64.b64decode(bootstrap[test["bootstrapInfoId"]])
-    box = readboxtype(bootstrap, 0)
-    antal = None
-    if box[2] == b"abst":
-        antal = readbox(bootstrap, box[0])
+    def download(self):
+        if self.options.live and not self.options.force:
+            raise LiveHDSException(self.url)
 
-    baseurl = url[0:url.rfind("/")]
-    i = 1
+        querystring = self.kwargs["querystring"]
+        bootstrap = base64.b64decode(self.kwargs["bootstrap"])
+        box = readboxtype(bootstrap, 0)
+        antal = None
+        if box[2] == b"abst":
+            antal = readbox(bootstrap, box[0])
+        baseurl = self.kwargs["manifest"][0:self.kwargs["manifest"].rfind("/")]
 
-    if options.output != "-":
-        extension = re.search(r"(\.[a-z0-9]+)$", options.output)
-        if not extension:
-            options.output = "%s.flv" % options.output
-        log.info("Outfile: %s", options.output)
-        file_d = open(options.output, "wb")
-    else:
-        file_d = sys.stdout
+        file_d = output(self.options, self.options.output, "flv")
+        if hasattr(file_d, "read") is False:
+            return
 
-    metasize = struct.pack(">L", len(base64.b64decode(test["metadata"])))[1:]
-    file_d.write(binascii.a2b_hex(b"464c560105000000090000000012"))
-    file_d.write(metasize)
-    file_d.write(binascii.a2b_hex(b"00000000000000"))
-    file_d.write(base64.b64decode(test["metadata"]))
-    file_d.write(binascii.a2b_hex(b"00000000"))
-    total = antal[1]["total"]
-    eta = ETA(total)
-    while i <= total:
-        url = "%s/%sSeg1-Frag%s" % (baseurl, test["url"], i)
-        if options.output != "-":
-            eta.update(i)
-            progressbar(total, i, ''.join(["ETA: ", str(eta)]))
-        data = get_http_data(url)
-        number = decode_f4f(i, data)
-        file_d.write(data[number:])
-        i += 1
+        metasize = struct.pack(">L", len(base64.b64decode(self.kwargs["metadata"])))[1:]
+        file_d.write(binascii.a2b_hex(b"464c560105000000090000000012"))
+        file_d.write(metasize)
+        file_d.write(binascii.a2b_hex(b"00000000000000"))
+        file_d.write(base64.b64decode(self.kwargs["metadata"]))
+        file_d.write(binascii.a2b_hex(b"00000000"))
+        i = 1
+        start = antal[1]["first"]
+        total = antal[1]["total"]
+        eta = ETA(total)
+        while i <= total:
+            url = "%s/%sSeg1-Frag%s?%s" % (baseurl, self.url, start, querystring)
+            if self.options.output != "-":
+                eta.update(i)
+                progressbar(total, i, ''.join(["ETA: ", str(eta)]))
+            data = get_http_data(url)
+            number = decode_f4f(i, data)
+            file_d.write(data[number:])
+            i += 1
+            start += 1
 
-    if options.output != "-":
-        file_d.close()
-        progress_stream.write('\n')
+        if self.options.output != "-":
+            file_d.close()
+            progress_stream.write('\n')
 
 def readbyte(data, pos):
     return struct.unpack("B", bytes(_chr(data[pos]), "ascii"))[0]
@@ -119,6 +120,10 @@ def read24(data, pos):
 def read32(data, pos):
     end = pos + 4
     return struct.unpack(">i", data[pos:end])[0]
+
+def readu32(data, pos):
+    end = pos + 4
+    return struct.unpack(">I", data[pos:end])[0]
 
 def read64(data, pos):
     end = pos + 8
@@ -146,25 +151,25 @@ def readboxtype(data, pos):
 # Note! A lot of variable assignments are commented out. These are
 # accessible values that we currently don't use.
 def readbox(data, pos):
-    #version = readbyte(data, pos)
+    # version = readbyte(data, pos)
     pos += 1
-    #flags = read24(data, pos)
+    # flags = read24(data, pos)
     pos += 3
-    #bootstrapversion = read32(data, pos)
+    # bootstrapversion = read32(data, pos)
     pos += 4
-    #byte = readbyte(data, pos)
+    # byte = readbyte(data, pos)
     pos += 1
-    #profile = (byte & 0xC0) >> 6
-    #live = (byte & 0x20) >> 5
-    #update = (byte & 0x10) >> 4
-    #timescale = read32(data, pos)
+    # profile = (byte & 0xC0) >> 6
+    # live = (byte & 0x20) >> 5
+    # update = (byte & 0x10) >> 4
+    # timescale = read32(data, pos)
     pos += 4
-    #currentmediatime = read64(data, pos)
+    # currentmediatime = read64(data, pos)
     pos += 8
-    #smptetimecodeoffset = read64(data, pos)
+    # smptetimecodeoffset = read64(data, pos)
     pos += 8
     temp = readstring(data, pos)
-    #movieidentifier = temp[1]
+    # movieidentifier = temp[1]
     pos = temp[0]
     serverentrycount = readbyte(data, pos)
     pos += 1
@@ -186,10 +191,10 @@ def readbox(data, pos):
         i += 1
 
     tmp = readstring(data, pos)
-    #drm = tmp[1]
+    # drm = tmp[1]
     pos = tmp[0]
     tmp = readstring(data, pos)
-    #metadata = tmp[1]
+    # metadata = tmp[1]
     pos = tmp[0]
     segmentruntable = readbyte(data, pos)
     pos += 1
@@ -204,52 +209,60 @@ def readbox(data, pos):
     fragRunTableCount = readbyte(data, pos)
     pos += 1
     i = 0
+    first = 1
     while i < fragRunTableCount:
         tmp = readboxtype(data, pos)
         boxtype = tmp[2]
         boxsize = tmp[1]
         pos = tmp[0]
         if boxtype == b"afrt":
-            readafrtbox(data, pos)
+            first = readafrtbox(data, pos)
             pos += boxsize
         i += 1
+    antal[1]["first"] = first
     return antal
 
 # Note! A lot of variable assignments are commented out. These are
 # accessible values that we currently don't use.
 def readafrtbox(data, pos):
-    #version = readbyte(data, pos)
+    # version = readbyte(data, pos)
     pos += 1
-    #flags = read24(data, pos)
+    # flags = read24(data, pos)
     pos += 3
-    #timescale = read32(data, pos)
+    # timescale = read32(data, pos)
     pos += 4
     qualityentry = readbyte(data, pos)
     pos += 1
     i = 0
     while i < qualityentry:
         temp = readstring(data, pos)
-        #qualitysegmulti = temp[1]
+        # qualitysegmulti = temp[1]
         pos = temp[0]
         i += 1
     fragrunentrycount = read32(data, pos)
     pos += 4
     i = 0
+    first = 1
+    skip = False
     while i < fragrunentrycount:
-        #firstfragment = read32(data, pos)
+        firstfragment = readu32(data, pos)
+        if not skip:
+            first = firstfragment
+            skip = True
         pos += 4
-        #timestamp = read64(data, pos)
+        # timestamp = read64(data, pos)
         pos += 8
-        #duration = read32(data, pos)
+        # duration = read32(data, pos)
         pos += 4
         i += 1
+    return first
 
 # Note! A lot of variable assignments are commented out. These are
 # accessible values that we currently don't use.
 def readasrtbox(data, pos):
-    #version = readbyte(data, pos)
+    # version = readbyte(data, pos)
     pos += 1
-    #flags = read24(data, pos)
+    # flags = read24(data, pos)
     pos += 3
     qualityentrycount = readbyte(data, pos)
     pos += 1

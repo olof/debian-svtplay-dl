@@ -4,16 +4,19 @@ from __future__ import absolute_import
 import sys
 import re
 import json
+import copy
+import os
 
 from svtplay_dl.utils.urllib import CookieJar, Cookie
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, select_quality, subtitle_json
+from svtplay_dl.utils import get_http_data, filenamify
 from svtplay_dl.log import log
-from svtplay_dl.fetcher.rtmp import download_rtmp
-from svtplay_dl.fetcher.hls import download_hls
+from svtplay_dl.fetcher.rtmp import RTMP
+from svtplay_dl.fetcher.hls import HLS, hlsparse
+from svtplay_dl.subtitle import subtitle_json
 
 class Kanal5(Service):
-    supported_domains = ['kanal5play.se', 'kanal9play.se']
+    supported_domains = ['kanal5play.se', 'kanal9play.se', 'kanal11play.se']
 
     def __init__(self, url):
         Service.__init__(self, url)
@@ -28,70 +31,66 @@ class Kanal5(Service):
 
         video_id = match.group(1)
         if options.username and options.password:
-            #bogus
+            # bogus
             cc = Cookie(None, 'asdf', None, '80', '80', 'www.kanal5play.se', None, None, '/', None, False, False, 'TestCookie', None, None, None)
             self.cj.set_cookie(cc)
-            #get session cookie
+            # get session cookie
             data = get_http_data("http://www.kanal5play.se/", cookiejar=self.cj)
-            authurl = "https://kanal5swe.appspot.com/api/user/login?callback=jQuery171029989&email=%s&password=%s&_=136250" % (options.username, options.password)
+            authurl = "https://kanal5swe.appspot.com/api/user/login?callback=jQuery171029989&email=%s&password=%s&_=136250" % \
+                      (options.username, options.password)
             data = get_http_data(authurl)
             match = re.search(r"({.*})\);", data)
             jsondata = json.loads(match.group(1))
-            if jsondata["success"] == False:
+            if jsondata["success"] is False:
                 log.error(jsondata["message"])
                 sys.exit(2)
             authToken = jsondata["userData"]["auth"]
             cc = Cookie(version=0, name='authToken',
-                          value=authToken,
-                          port=None, port_specified=False,
-                          domain='www.kanal5play.se',
-                          domain_specified=True,
-                          domain_initial_dot=True, path='/',
-                          path_specified=True, secure=False,
-                          expires=None, discard=True, comment=None,
-                          comment_url=None, rest={'HttpOnly': None})
+                        value=authToken,
+                        port=None, port_specified=False,
+                        domain='www.kanal5play.se',
+                        domain_specified=True,
+                        domain_initial_dot=True, path='/',
+                        path_specified=True, secure=False,
+                        expires=None, discard=True, comment=None,
+                        comment_url=None, rest={'HttpOnly': None})
             self.cj.set_cookie(cc)
 
-        format_ = "FLASH"
-        if options.hls:
-            format_ = "IPHONE"
-        url = "http://www.kanal5play.se/api/getVideo?format=%s&videoId=%s" % (format_, video_id)
+        url = "http://www.kanal5play.se/api/getVideo?format=FLASH&videoId=%s" % video_id
         data = json.loads(get_http_data(url, cookiejar=self.cj))
         if not options.live:
             options.live = data["isLive"]
         if data["hasSubtitle"]:
-            self.subtitle = "http://www.kanal5play.se/api/subtitles/%s" % video_id
+            yield subtitle_json("http://www.kanal5play.se/api/subtitles/%s" % video_id)
 
-        if options.subtitle and options.force_subtitle:
-            return
+        if options.output_auto:
+            directory = os.path.dirname(options.output)
+            options.service = "kanal5"
 
-        if options.hls:
-            url = data["streams"][0]["source"]
-            if data["streams"][0]["drmProtected"]:
+            title = "%s-s%s-%s-%s-%s" % (data["program"]["name"], data["seasonNumber"], data["episodeText"], data["id"], options.service)
+            title = filenamify(title)
+            if len(directory):
+                options.output = "%s/%s" % (directory, title)
+            else:
+                options.output = title
+
+        for i in data["streams"]:
+            if i["drmProtected"]:
                 log.error("We cant download drm files for this site.")
                 sys.exit(2)
-            download_hls(options, url)
-        else:
-            streams = {}
-
-            for i in data["streams"]:
-                stream = {}
-                if i["drmProtected"]:
-                    log.error("We cant download drm files for this site.")
-                    sys.exit(2)
-                stream["source"] = i["source"]
-                streams[int(i["bitrate"])] = stream
-
             steambaseurl = data["streamBaseUrl"]
+            bitrate = i["bitrate"]
+            if bitrate > 1000:
+                bitrate = bitrate / 1000
+            options2 = copy.copy(options)
+            options2.other = "-W %s -y %s " % ("http://www.kanal5play.se/flash/K5StandardPlayer.swf", i["source"])
+            options2.live = True
+            yield RTMP(options2, steambaseurl, bitrate)
 
-            test = select_quality(options, streams)
-
-            filename = test["source"]
-            match = re.search(r"^(.*):", filename)
-            options.other = "-W %s -y %s " % ("http://www.kanal5play.se/flash/K5StandardPlayer.swf", filename)
-            download_rtmp(options, steambaseurl)
-
-    def get_subtitle(self, options):
-        if self.subtitle:
-            data = get_http_data(self.subtitle, cookiejar=self.cj)
-            subtitle_json(options, data)
+        url = "http://www.kanal5play.se/api/getVideo?format=IPAD&videoId=%s" % video_id
+        data = json.loads(get_http_data(url, cookiejar=self.cj))
+        if "streams" in data.keys():
+            for i in data["streams"]:
+                streams = hlsparse(i["source"])
+                for n in list(streams.keys()):
+                    yield HLS(copy.copy(options), streams[n], n)

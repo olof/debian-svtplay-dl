@@ -2,44 +2,45 @@
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
 import subprocess
-import re
 import shlex
 
 from svtplay_dl.log import log
 from svtplay_dl.utils import is_py2
+from svtplay_dl.fetcher import VideoRetriever
+from svtplay_dl.output import output
 
-def download_rtmp(options, url):
-    """ Get the stream from RTMP """
-    args = []
-    if options.live:
-        args.append("-v")
+class RTMP(VideoRetriever):
+    def name(self):
+        return "rtmp"
 
-    if options.resume:
-        args.append("-e")
+    def download(self):
+        """ Get the stream from RTMP """
+        args = []
+        if self.options.live:
+            args.append("-v")
 
-    extension = re.search(r"(\.[a-z0-9]+)$", url)
-    if options.output != "-":
-        if not extension:
-            options.output = "%s.flv" % options.output
-        else:
-            options.output = options.output + extension.group(1)
-        log.info("Outfile: %s", options.output)
-        args += ["-o", options.output]
-    if options.silent or options.output == "-":
-        args.append("-q")
-    if options.other:
-        if is_py2:
-            args += shlex.split(options.other.encode("utf-8"))
-        else:
-            args += shlex.split(options.other)
+        if self.options.resume:
+            args.append("-e")
 
-    if options.verbose:
-        args.append("-V")
+        file_d = output(self.options, self.options.output, "flv", False)
+        if hasattr(file_d, "read") is False:
+            return
+        args += ["-o", self.options.output]
+        if self.options.silent or self.options.output == "-":
+            args.append("-q")
+        if self.options.other:
+            if is_py2:
+                args += shlex.split(self.options.other.encode("utf-8"))
+            else:
+                args += shlex.split(self.options.other)
 
-    command = ["rtmpdump", "-r", url] + args
-    log.debug("Running: %s", " ".join(command))
-    try:
-        subprocess.call(command)
-    except OSError as e:
-        log.error("Could not execute rtmpdump: " + e.strerror)
+        if self.options.verbose:
+            args.append("-V")
+
+        command = ["rtmpdump", "-r", self.url] + args
+        log.debug("Running: %s", " ".join(command))
+        try:
+            subprocess.call(command)
+        except OSError as e:
+            log.error("Could not execute rtmpdump: " + e.strerror)
 

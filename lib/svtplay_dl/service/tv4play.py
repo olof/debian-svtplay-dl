@@ -3,15 +3,19 @@
 from __future__ import absolute_import
 import sys
 import re
+import os
 import xml.etree.ElementTree as ET
 import json
+import copy
 
 from svtplay_dl.utils.urllib import urlparse, parse_qs, quote_plus
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import get_http_data, select_quality, subtitle_smi, is_py2_old
+from svtplay_dl.utils import get_http_data, is_py2_old, filenamify
 from svtplay_dl.log import log
-from svtplay_dl.fetcher.rtmp import download_rtmp
-from svtplay_dl.fetcher.hds import download_hds
+from svtplay_dl.fetcher.hls import hlsparse, HLS
+from svtplay_dl.fetcher.rtmp import RTMP
+from svtplay_dl.fetcher.hds import hdsparse
+from svtplay_dl.subtitle import subtitle_smi
 
 class Tv4play(Service, OpenGraphThumbMixin):
     supported_domains = ['tv4play.se', 'tv4.se']
@@ -24,7 +28,7 @@ class Tv4play(Service, OpenGraphThumbMixin):
         parse = urlparse(self.url)
         if "tv4play.se" in self.url:
             try:
-                vid = parse_qs(parse[4])["video_id"][0]
+                vid = parse_qs(parse.query)["video_id"][0]
             except KeyError:
                 log.error("Can't find video file")
                 sys.exit(2)
@@ -52,48 +56,54 @@ class Tv4play(Service, OpenGraphThumbMixin):
         if xml.find("live").text:
             if xml.find("live").text != "false":
                 options.live = True
+        if xml.find("drmProtected").text == "true":
+            log.error("DRM protected content.")
+            sys.exit(2)
 
-        streams = {}
+        if options.output_auto:
+            directory = os.path.dirname(options.output)
+            options.service = "tv4play"
+            title = "%s-%s-%s" % (options.output, vid, options.service)
+            title = filenamify(title)
+            if len(directory):
+                options.output = "%s/%s" % (directory, title)
+            else:
+                options.output = title
 
         for i in sa:
             if i.find("mediaFormat").text == "mp4":
-                stream = {}
-                stream["uri"] = i.find("base").text
-                stream["path"] = i.find("url").text
-                streams[int(i.find("bitrate").text)] = stream
+                base = urlparse(i.find("base").text)
+                parse = urlparse(i.find("url").text)
+                if base.scheme == "rtmp":
+                    swf = "http://www.tv4play.se/flash/tv4playflashlets.swf"
+                    options.other = "-W %s -y %s" % (swf, i.find("url").text)
+                    yield RTMP(copy.copy(options), i.find("base").text, i.find("bitrate").text)
+                elif parse.path[len(parse.path)-3:len(parse.path)] == "f4m":
+                    query = ""
+                    if i.find("url").text[-1] != "?":
+                        query = "?"
+                    manifest = "%s%shdcore=2.8.0&g=hejsan" % (i.find("url").text, query)
+                    streams = hdsparse(copy.copy(options), manifest)
+                    for n in list(streams.keys()):
+                        yield streams[n]
             elif i.find("mediaFormat").text == "smi":
-                self.subtitle = i.find("url").text
+                yield subtitle_smi(i.find("url").text)
 
-        if len(streams) == 0:
-            log.error("Can't find any streams")
-            sys.exit(2)
-        elif len(streams) == 1:
-            test = streams[list(streams.keys())[0]]
+        url = "http://premium.tv4play.se/api/web/asset/%s/play?protocol=hls" % vid
+        data = get_http_data(url)
+        xml = ET.XML(data)
+        ss = xml.find("items")
+        if is_py2_old:
+            sa = list(ss.getiterator("item"))
         else:
-            test = select_quality(options, streams)
-
-        ## This is how we construct an swf uri, if we'll ever need one
-        swf = "http://www.tv4play.se/flash/tv4playflashlets.swf"
-        options.other = "-W %s -y %s" % (swf, test["path"])
-
-        if options.subtitle and options.force_subtitle:
-            return
-
-        if test["uri"][0:4] == "rtmp":
-            download_rtmp(options, test["uri"])
-        elif test["uri"][len(test["uri"])-3:len(test["uri"])] == "f4m":
-            match = re.search(r"\/se\/secure\/", test["uri"])
-            if match:
-                log.error("This stream is encrypted. Use --hls option")
-                sys.exit(2)
-            manifest = "%s?hdcore=2.8.0&g=hejsan" % test["path"]
-            download_hds(options, manifest)
-
-
-    def get_subtitle(self, options):
-        if self.subtitle:
-            data = get_http_data(self.subtitle)
-            subtitle_smi(options, data)
+            sa = list(ss.iter("item"))
+        for i in sa:
+            if i.find("mediaFormat").text == "mp4":
+                parse = urlparse(i.find("url").text)
+                if parse.path.endswith("m3u8"):
+                    streams = hlsparse(i.find("url").text)
+                    for n in list(streams.keys()):
+                        yield HLS(copy.copy(options), streams[n], n)
 
     def find_all_episodes(self, options):
         parse =  urlparse(self.url)
@@ -107,7 +117,8 @@ class Tv4play(Service, OpenGraphThumbMixin):
             except ValueError:
                 days = 999
             if  days > 0:
-                id = i["id"]
-                url = "http://www.tv4play.se/program/%s?video_id=%s" % (show, id)
+                video_id = i["id"]
+                url = "http://www.tv4play.se/program/%s?video_id=%s" % (
+                    show, video_id)
                 episodes.append(url)
         return sorted(episodes)

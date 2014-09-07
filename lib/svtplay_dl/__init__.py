@@ -11,13 +11,14 @@ from optparse import OptionParser
 
 from svtplay_dl.error import UIException
 from svtplay_dl.log import log
-from svtplay_dl.utils import get_http_data, decode_html_entities, filenamify
+from svtplay_dl.utils import decode_html_entities, filenamify, select_quality
 from svtplay_dl.service import service_handler, Generic
+from svtplay_dl.fetcher import VideoRetriever
+from svtplay_dl.subtitle import subtitle
 
+__version__ = "0.9.2014.08.28"
 
-__version__ = "0.9.2014.04.27"
-
-class Options:
+class Options(object):
     """
     Options used when invoking the script from another Python script.
 
@@ -55,6 +56,10 @@ class Options:
         self.thumbnail = False
         self.all_episodes = False
         self.force_subtitle = False
+        self.preferred = None
+        self.verbose = False
+        self.output_auto = False
+        self.service = None
 
 def get_media(url, options):
 
@@ -90,6 +95,7 @@ def get_one_media(stream, options):
         data = stream.get_urldata()
         match = re.search(r"(?i)<title[^>]*>\s*(.*?)\s*</title>", data, re.S)
         if match:
+            options.output_auto = True
             title_tag = decode_html_entities(match.group(1))
             if not options.output:
                 options.output = filenamify(title_tag)
@@ -102,25 +108,48 @@ def get_one_media(stream, options):
         if options.output.find("\\") > 0:
             options.output = options.output.replace("\\", "/")
 
-    try:
-        stream.get(options)
-    except UIException as e:
-        if options.verbose:
-            raise e
-        log.error(e.message)
-        sys.exit(2)
+    videos = []
+    subs = []
+    streams = stream.get(options)
+    if streams:
+        for i in streams:
+            if isinstance(i, VideoRetriever):
+                if options.preferred:
+                    if options.preferred == i.name():
+                        videos.append(i)
+                else:
+                    videos.append(i)
+            if isinstance(i, subtitle):
+                subs.append(i)
 
-    if options.subtitle:
-        if options.output != "-":
-            stream.get_subtitle(options)
-    if options.thumbnail:
-        if hasattr(stream, "get_thumbnail"):
-            log.info("thumb requested")
-            if options.output != "-":
-                log.info("getting thumbnail")
-                stream.get_thumbnail(options)
+        if options.subtitle and options.output != "-":
+            if subs:
+                subs[0].download(copy.copy(options))
+            if options.force_subtitle:
+                return
+
+        if len(videos) > 0:
+            stream = select_quality(options, videos)
+            try:
+                stream.download()
+            except UIException as e:
+                if options.verbose:
+                    raise e
+                log.error(e.message)
+                sys.exit(2)
+
+            if options.thumbnail:
+                if hasattr(stream, "get_thumbnail"):
+                    log.info("thumb requested")
+                    if options.output != "-":
+                        log.info("getting thumbnail")
+                        stream.get_thumbnail(options)
+            else:
+                log.info("no thumb requested")
+        else:
+            log.error("Can't find any streams for that url")
     else:
-        log.info("no thumb requested")
+        log.error("Can't find any streams for that url")
 
 
 def setup_log(silent, verbose=False):
@@ -153,7 +182,7 @@ def main():
                       help="Resume a download")
     parser.add_option("-l", "--live",
                       action="store_true", dest="live", default=False,
-                      help="Enable for live streams")
+                      help="Enable for live streams (RTMP based ones)")
     parser.add_option("-s", "--silent",
                       action="store_true", dest="silent", default=False)
     parser.add_option("-v", "--verbose",
@@ -165,7 +194,7 @@ def main():
     parser.add_option("-Q", "--flexible-quality", default=0,
                       metavar="amount", dest="flexibleq", help="Allow given quality (as above) to differ by an amount.")
     parser.add_option("-H", "--hls",
-                      action="store_true", dest="hls", default=False)
+                      action="store_true", dest="hls", default=False, help="obsolete use -P")
     parser.add_option("-S", "--subtitle",
                       action="store_true", dest="subtitle", default=False,
                       help="Download subtitle from the site if available.")
@@ -181,13 +210,15 @@ def main():
     parser.add_option("-A", "--all-episodes",
                       action="store_true", dest="all_episodes", default=False,
                       help="Try to download all episodes.")
+    parser.add_option("-P", "--preferred", default=None,
+                      metavar="preferred", help="preferred download method (rtmp, hls or hds)")
     (options, args) = parser.parse_args()
     if not args:
         parser.print_help()
         sys.exit(0)
     if len(args) != 1:
         parser.error("incorrect number of arguments")
-
+    options = mergeParserOption(Options(), options)
     setup_log(options.silent, options.verbose)
 
     if options.flexibleq and not options.quality:
@@ -199,4 +230,23 @@ def main():
     try:
         get_media(url, options)
     except KeyboardInterrupt:
-        pass
+        print("")
+
+def mergeParserOption(options, parser):
+    options.output = parser.output
+    options.resume = parser.resume
+    options.live = parser.live
+    options.silent = parser.silent
+    options.force = parser.force
+    options.quality = parser.quality
+    options.flexibleq = parser.flexibleq
+    options.hls = parser.hls
+    options.subtitle = parser.subtitle
+    options.username = parser.username
+    options.password = parser.password
+    options.thumbnail = parser.thumbnail
+    options.all_episodes = parser.all_episodes
+    options.force_subtitle = parser.force_subtitle
+    options.preferred = parser.preferred
+    options.verbose = parser.verbose
+    return options

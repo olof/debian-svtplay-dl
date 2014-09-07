@@ -8,14 +8,15 @@ from __future__ import absolute_import
 import sys
 import re
 import json
+import copy
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.utils.urllib import urlparse, quote
 from svtplay_dl.service import Service
 from svtplay_dl.utils import get_http_data
 from svtplay_dl.log import log
-from svtplay_dl.fetcher.hls import download_hls
-from svtplay_dl.fetcher.http import download_http
+from svtplay_dl.fetcher.hls import HLS, hlsparse
+from svtplay_dl.fetcher.http import HTTP
 
 class JustinException(Exception):
     pass
@@ -67,14 +68,11 @@ class Justin(Service):
         url = "http://api.justin.tv/api/broadcast/by_%s/%s.xml?onsite=true" % (
             vidtype, vid)
         data = get_http_data(url)
-        if not data:
-            return False
 
         xml = ET.XML(data)
         url = xml.find("archive").find("video_file_url").text
 
-        download_http(options, url)
-
+        yield HTTP(copy.copy(options), url)
 
     def _get_archive(self, urlp, options):
         match = re.match(r'/\w+/b/(\d+)', urlp.path)
@@ -148,4 +146,6 @@ class Justin(Service):
         if not options.output:
             options.output = channel
 
-        download_hls(options, hls_url)
+        streams = hlsparse(hls_url)
+        for n in list(streams.keys()):
+            yield HLS(copy.copy(options), streams[n], n)

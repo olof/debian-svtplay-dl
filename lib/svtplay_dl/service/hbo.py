@@ -3,13 +3,14 @@
 from __future__ import absolute_import
 import sys
 import re
+import copy
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, select_quality, is_py2_old
+from svtplay_dl.utils import get_http_data, is_py2_old
 from svtplay_dl.log import log
-from svtplay_dl.fetcher.rtmp import download_rtmp
+from svtplay_dl.fetcher.rtmp import RTMP
 
 class Hbo(Service):
     supported_domains = ['hbo.com']
@@ -17,7 +18,7 @@ class Hbo(Service):
     def get(self, options):
         parse = urlparse(self.url)
         try:
-            other = parse[5]
+            other = parse.fragment
         except KeyError:
             log.error("Something wrong with that url")
             sys.exit(2)
@@ -37,13 +38,9 @@ class Hbo(Service):
             sa = list(ss.getiterator("size"))
         else:
             sa = list(ss.iter("size"))
-        streams = {}
+
         for i in sa:
-            stream = {}
-            stream["path"] = i.find("tv14").find("path").text
-            streams[int(i.attrib["width"])] = stream
-
-        test = select_quality(options, streams)
-
-        download_rtmp(options, test["path"])
-
+            videourl = i.find("tv14").find("path").text
+            match = re.search("/([a-z0-9]+:[a-z0-9]+)/", videourl)
+            options.other = "-y %s" % videourl[videourl.index(match.group(1)):]
+            yield RTMP(copy.copy(options), videourl[:videourl.index(match.group(1))], i.attrib["width"])
