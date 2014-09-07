@@ -6,3 +6,5 @@ dist/
 cover/
 *.egg-info
 svtplay-dl
+debian/patches/
+.pc/
