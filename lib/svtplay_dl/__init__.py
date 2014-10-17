@@ -16,7 +16,7 @@ from svtplay_dl.service import service_handler, Generic
 from svtplay_dl.fetcher import VideoRetriever
 from svtplay_dl.subtitle import subtitle
 
-__version__ = "0.9.2014.08.28"
+__version__ = "0.9.2014.10.13"
 
 class Options(object):
     """
@@ -71,9 +71,15 @@ def get_media(url, options):
         sys.exit(2)
 
     if options.all_episodes:
-        if options.output and not os.path.isdir(options.output):
+        if options.output and os.path.isfile(options.output):
             log.error("Output must be a directory if used with --all-episodes")
             sys.exit(2)
+        elif options.output and not os.path.exists(options.output):
+            try:
+                os.makedirs(options.output)
+            except OSError as e:
+                log.error("%s: %s" % (e.strerror,  e.filename))
+                return
 
         episodes = stream.find_all_episodes(options)
 
@@ -111,45 +117,42 @@ def get_one_media(stream, options):
     videos = []
     subs = []
     streams = stream.get(options)
-    if streams:
-        for i in streams:
-            if isinstance(i, VideoRetriever):
-                if options.preferred:
-                    if options.preferred == i.name():
-                        videos.append(i)
-                else:
+    for i in streams:
+        if isinstance(i, VideoRetriever):
+            if options.preferred:
+                if options.preferred == i.name():
                     videos.append(i)
-            if isinstance(i, subtitle):
-                subs.append(i)
-
-        if options.subtitle and options.output != "-":
-            if subs:
-                subs[0].download(copy.copy(options))
-            if options.force_subtitle:
-                return
-
-        if len(videos) > 0:
-            stream = select_quality(options, videos)
-            try:
-                stream.download()
-            except UIException as e:
-                if options.verbose:
-                    raise e
-                log.error(e.message)
-                sys.exit(2)
-
-            if options.thumbnail:
-                if hasattr(stream, "get_thumbnail"):
-                    log.info("thumb requested")
-                    if options.output != "-":
-                        log.info("getting thumbnail")
-                        stream.get_thumbnail(options)
             else:
-                log.info("no thumb requested")
-        else:
-            log.error("Can't find any streams for that url")
-    else:
+                videos.append(i)
+        if isinstance(i, subtitle):
+            subs.append(i)
+
+    if options.subtitle and options.output != "-":
+        if subs:
+            subs[0].download(copy.copy(options))
+        if options.force_subtitle:
+            return
+
+    if len(videos) == 0:
         log.error("Can't find any streams for that url")
+    else:
+        stream = select_quality(options, videos)
+        log.info("Selected to download %s, bitrate: %s",
+            stream.name(), stream.bitrate)
+        try:
+            stream.download()
+        except UIException as e:
+            if options.verbose:
+                raise e
+            log.error(e.message)
+            sys.exit(2)
+
+        if options.thumbnail and hasattr(stream, "get_thumbnail"):
+            if options.output != "-":
+                log.info("Getting thumbnail")
+                stream.get_thumbnail(options)
+            else:
+                log.warning("Can not get thumbnail when fetching to stdout")
 
 
 def setup_log(silent, verbose=False):
@@ -160,7 +163,7 @@ def setup_log(silent, verbose=False):
     elif verbose:
         stream = sys.stderr
         level = logging.DEBUG
-        fmt = logging.Formatter('[%(created).3f] %(pathname)s/%(funcName)s: %(levelname)s %(message)s')
+        fmt = logging.Formatter('%(levelname)s [%(created)s] %(pathname)s/%(funcName)s: %(message)s')
     else:
         stream = sys.stdout
         level = logging.INFO
@@ -179,7 +182,7 @@ def main():
                       metavar="OUTPUT", help="Outputs to the given filename.")
     parser.add_option("-r", "--resume",
                       action="store_true", dest="resume", default=False,
-                      help="Resume a download")
+                      help="Resume a download (RTMP based ones)")
     parser.add_option("-l", "--live",
                       action="store_true", dest="live", default=False,
                       help="Enable for live streams (RTMP based ones)")

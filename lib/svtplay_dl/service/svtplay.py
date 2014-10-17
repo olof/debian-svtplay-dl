@@ -48,11 +48,12 @@ class Svtplay(Service, OpenGraphThumbMixin):
             options.live = False
 
         if data["video"]["subtitleReferences"]:
+            subtitle = None
             try:
                 subtitle = data["video"]["subtitleReferences"][0]["url"]
             except KeyError:
                 pass
-            if len(subtitle) > 0:
+            if subtitle and len(subtitle) > 0:
                 yield subtitle_wsrt(subtitle)
 
         if options.output_auto:
@@ -70,6 +71,9 @@ class Svtplay(Service, OpenGraphThumbMixin):
             else:
                 options.output = title
 
+        if options.force_subtitle:
+            return
+
         for i in data["video"]["videoReferences"]:
             parse = urlparse(i["url"])
 
@@ -83,8 +87,9 @@ class Svtplay(Service, OpenGraphThumbMixin):
                     parse = urlparse(i["url"])
                     manifest = "%s://%s%s?%s&hdcore=3.3.0" % (parse.scheme, parse.netloc, parse.path, parse.query)
                     streams = hdsparse(copy.copy(options), manifest)
-                    for n in list(streams.keys()):
-                        yield streams[n]
+                    if streams:
+                        for n in list(streams.keys()):
+                            yield streams[n]
             elif parse.scheme == "rtmp":
                 embedurl = "%s?type=embed" % url
                 data = get_http_data(embedurl)
