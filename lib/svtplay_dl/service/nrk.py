@@ -24,6 +24,10 @@ class Nrk(Service, OpenGraphThumbMixin):
             parse = urlparse(self.url)
             subtitle = "%s://%s%s" % (parse.scheme, parse.netloc, match.group(1))
             yield subtitle_tt(subtitle)
+
+        if options.force_subtitle:
+            return
+
         match = re.search(r'data-media="(.*manifest.f4m)"', data)
         if match:
             manifest_url = match.group(1)
@@ -49,5 +53,6 @@ class Nrk(Service, OpenGraphThumbMixin):
 
         manifest_url = "%s?hdcore=2.8.0&g=hejsan" % manifest_url
         streams = hdsparse(copy.copy(options), manifest_url)
-        for n in list(streams.keys()):
-            yield streams[n]
+        if streams:
+            for n in list(streams.keys()):
+                yield streams[n]

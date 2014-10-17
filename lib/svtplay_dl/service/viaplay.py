@@ -47,7 +47,7 @@ class Viaplay(Service, OpenGraphThumbMixin):
             return match.group(1)
 
         parse = urlparse(self.url)
-        match = re.search(r'\/(\d+)/\?', parse.path)
+        match = re.search(r'/\w+/(\d+)', parse.path)
         if match:
             return match.group(1)
 
@@ -63,13 +63,18 @@ class Viaplay(Service, OpenGraphThumbMixin):
         options.other = ""
         data = get_http_data(url)
         xml = ET.XML(data)
+        error = xml.find("Error")
+        if error is not None:
+            log.error("%s" % error.text)
+            return
         live = xml.find("Product").find("LiveInfo")
         if live is not None:
             live = live.find("Live").text
             if live == "true":
                 options.live = True
 
-        yield subtitle_sami(xml.find("Product").find("SamiFile").text)
+        if xml.find("Product").find("SamiFile").text:
+            yield subtitle_sami(xml.find("Product").find("SamiFile").text)
 
         # Fulhack.. expose error code from get_http_data.
         filename = xml.find("Product").find("Videos").find("Video").find("Url").text
@@ -92,8 +97,9 @@ class Viaplay(Service, OpenGraphThumbMixin):
             if filename[len(filename)-3:] == "f4m":
                 manifest = "%s?hdcore=2.8.0&g=hejsan" % filename
                 streams = hdsparse(copy.copy(options), manifest)
-                for n in list(streams.keys()):
-                    yield streams[n]
+                if streams:
+                    for n in list(streams.keys()):
+                        yield streams[n]
             else:
                 parse = urlparse(filename)
                 match = re.search("^(/[^/]+)/(.*)", parse.path)
