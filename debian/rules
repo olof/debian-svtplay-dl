@@ -11,4 +11,4 @@ export PYTHON=/usr/bin/python
 export TEST_OPTS=-2
 
 %:
-	dh $@ --with python2
+	dh $@
