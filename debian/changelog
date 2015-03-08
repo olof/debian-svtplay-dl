@@ -1,3 +1,10 @@
+svtplay-dl (0.10.2015.01.28-1) experimental; urgency=medium
+
+  * Imported Upstream version 0.10.2015.01.28
+  * debian/rules: don't do --with python2, unnecessary
+
+ -- Olof Johansson <olof@ethup.se>  Sun, 08 Mar 2015 13:40:44 +0100
+
 svtplay-dl (0.9.2014.10.13-1) unstable; urgency=medium
 
   * Imported Upstream version 0.9.2014.10.13
