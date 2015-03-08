@@ -1,7 +1,6 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import sys
 import re
 import json
 import copy
@@ -15,26 +14,40 @@ class Aftonbladet(Service):
     supported_domains = ['tv.aftonbladet.se']
 
     def get(self, options):
-        data = self.get_urldata()
+        error, data = self.get_urldata()
+        if error:
+            log.error("Cant download page")
+            return
+
+        if self.exclude(options):
+            return
+
         match = re.search('data-aptomaId="([-0-9a-z]+)"', data)
         if not match:
             log.error("Can't find video info")
-            sys.exit(2)
+            return
         videoId = match.group(1)
         match = re.search(r'data-isLive="(\w+)"', data)
         if not match:
             log.error("Can't find live info")
-            sys.exit(2)
+            return
         if match.group(1) == "true":
             options.live = True
         if not options.live:
             dataurl = "http://aftonbladet-play-metadata.cdn.drvideo.aptoma.no/video/%s.json" % videoId
-            data = get_http_data(dataurl)
+            error, data = get_http_data(dataurl)
+            if error:
+                log.error("Cant get vidoe info")
+                return
             data = json.loads(data)
             videoId = data["videoId"]
 
         streamsurl = "http://aftonbladet-play-static-ext.cdn.drvideo.aptoma.no/actions/video/?id=%s&formats&callback=" % videoId
-        streams = json.loads(get_http_data(streamsurl))
+        error, data = get_http_data(streamsurl)
+        if error:
+            log.error("Cant download video info")
+            return
+        streams = json.loads(data)
         hlsstreams = streams["formats"]["hls"]
         if "level3" in hlsstreams.keys():
             hls = hlsstreams["level3"]

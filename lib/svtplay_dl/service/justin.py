@@ -5,7 +5,6 @@
 # pylint: disable=E1103
 
 from __future__ import absolute_import
-import sys
 import re
 import json
 import copy
@@ -49,6 +48,9 @@ class Justin(Service):
         urlp = urlparse(self.url)
         success = False
 
+        if self.exclude(options):
+            return
+
         for jtv_video_type in [self._get_chapter, self._get_archive,
                                self._get_channel]:
             try:
@@ -61,13 +63,16 @@ class Justin(Service):
         if not success:
             log.debug(str(e))
             log.error("This twitch/justin video type is unsupported")
-            sys.exit(2)
+            return
 
 
     def _get_static_video(self, vid, options, vidtype):
         url = "http://api.justin.tv/api/broadcast/by_%s/%s.xml?onsite=true" % (
             vidtype, vid)
-        data = get_http_data(url)
+        error, data = get_http_data(url)
+        if error:
+            log.error("Cant get api page")
+            return
 
         xml = ET.XML(data)
         url = xml.find("archive").find("video_file_url").text
@@ -119,7 +124,7 @@ class Justin(Service):
         # There are references to a api_token in global.js; it's used
         # with the "Twitch-Api-Token" HTTP header. But it doesn't seem
         # to be necessary.
-        payload = get_http_data(url, header={
+        error, payload = get_http_data(url, header={
             'Accept': 'application/vnd.twitchtv.v2+json'
         })
         return json.loads(payload)

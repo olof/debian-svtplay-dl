@@ -42,7 +42,10 @@ def _get_full_url(url, srcurl):
     return returl
 
 def hlsparse(url):
-    data = get_http_data(url)
+    error, data = get_http_data(url)
+    if error:
+        log.error("Cant get hls playlist")
+        return
     files = (parsem3u(data))[1]
     streams = {}
 
@@ -59,15 +62,16 @@ class HLS(VideoRetriever):
         if self.options.live and not self.options.force:
             raise LiveHLSException(self.url)
 
-        m3u8 = get_http_data(self.url)
+        error, m3u8 = get_http_data(self.url)
+        if error:
+            log.error("Cant get m3u8 file.")
+            return
         globaldata, files = parsem3u(m3u8)
         encrypted = False
         key = None
-        try:
+        if "KEY" in globaldata:
             keydata = globaldata["KEY"]
             encrypted = True
-        except KeyError:
-            pass
 
         if encrypted:
             try:
@@ -77,11 +81,14 @@ class HLS(VideoRetriever):
                 sys.exit(2)
 
             match = re.search(r'URI="(https?://.*?)"', keydata)
-            key = get_http_data(match.group(1))
+            error, key = get_http_data(match.group(1))
+            if error:
+                log.error("Can't get crypto key to decode files.")
+                return
             rand = os.urandom(16)
             decryptor = AES.new(key, AES.MODE_CBC, rand)
 
-        file_d = output(self.options, self.options.output, "ts")
+        file_d = output(self.options, "ts")
         if hasattr(file_d, "read") is False:
             return
 
@@ -95,7 +102,10 @@ class HLS(VideoRetriever):
                 progressbar(len(files), n, ''.join(['ETA: ', str(eta)]))
                 n += 1
 
-            data = get_http_data(item)
+            error, data = get_http_data(item)
+            if error:
+                log.error("Missing segment in playlist")
+                return
             if encrypted:
                 data = decryptor.decrypt(data)
             file_d.write(data)

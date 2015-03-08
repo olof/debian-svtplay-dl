@@ -22,8 +22,8 @@ is_py2_old = (sys.version_info < (2, 7))
 FIREFOX_UA = 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-GB; rv:1.9.0.3) Gecko/2008092417 Firefox/3.0.3'
 
 from svtplay_dl.utils.urllib import build_opener, Request, HTTPCookieProcessor, \
-                                    HTTPRedirectHandler, HTTPError, URLError, \
-                                    addinfourl, CookieJar
+                                    HTTPRedirectHandler, HTTPError, \
+                                    addinfourl, CookieJar, urlparse
 
 log = logging.getLogger('svtplay_dl')
 progress_stream = sys.stderr
@@ -42,40 +42,41 @@ class NoRedirectHandler(HTTPRedirectHandler):
     http_error_303 = http_error_302
     http_error_307 = http_error_302
 
-def get_http_data(url, header=None, data=None, useragent=FIREFOX_UA,
+def get_http_data(url, header=None, post=None, useragent=FIREFOX_UA,
                   referer=None, cookiejar=None):
     """ Get the page to parse it for streams """
     if not cookiejar:
         cookiejar = CookieJar()
 
+    if url.find("manifest.f4m") > 0:
+        parse = urlparse(url)
+        url = "%s://%s%s?%s&hdcore=3.3.0" % (parse.scheme, parse.netloc, parse.path, parse.query)
+
     log.debug("HTTP getting %r", url)
     starttime = time.time()
-
-    request = Request(url)
+    error = None
+    if post:
+        if is_py3:
+            post = bytes(post, encoding="utf-8")
+        request = Request(url, data=post)
+    else:
+        request = Request(url)
     standard_header = {'Referer': referer, 'User-Agent': useragent}
     for key, value in [head for head in standard_header.items() if head[1]]:
         request.add_header(key, value)
     if header:
         for key, value in [head for head in header.items() if head[1]]:
             request.add_header(key, value)
-    if data:
-        request.add_data(data)
 
     opener = build_opener(HTTPCookieProcessor(cookiejar))
 
     try:
         response = opener.open(request)
     except HTTPError as e:
-        log.error("Something wrong with that url")
-        log.error("Error code: %s", e.code)
-        sys.exit(5)
-    except URLError as e:
-        log.error("Something wrong with that url")
-        log.error("Error code: %s", e.reason)
-        sys.exit(5)
-    except ValueError as e:
-        log.error("Try adding http:// before the url")
-        sys.exit(5)
+        error = True
+        data = e.read()
+        return error, data
+
     if is_py3:
         data = response.read()
         try:
@@ -86,8 +87,7 @@ def get_http_data(url, header=None, data=None, useragent=FIREFOX_UA,
         try:
             data = response.read()
         except socket.error as e:
-            log.error("Lost the connection to the server")
-            sys.exit(5)
+            return True, "Lost the connection to the server"
     response.close()
 
     spent_time = time.time() - starttime
@@ -96,7 +96,7 @@ def get_http_data(url, header=None, data=None, useragent=FIREFOX_UA,
     log.debug("HTTP got %d bytes from %r in %.2fs (= %dbps)",
               len(data), url, spent_time, bps)
 
-    return data
+    return error, data
 
 def check_redirect(url):
     opener = build_opener(NoRedirectHandler())
@@ -106,6 +106,19 @@ def check_redirect(url):
         return response.headers["location"]
     else:
         return url
+
+def sort_quality(data):
+    data = sorted(data, key=lambda x: (x.bitrate, x.name()), reverse=True)
+    datas = []
+    for i in data:
+        datas.append([i.bitrate, i.name()])
+    return datas
+
+def list_quality(videos):
+    data = sort_quality(videos)
+    log.info("Quality\tMethod")
+    for i in data:
+        log.info("%s\t%s" % (i[0], i[1].upper()))
 
 def select_quality(options, streams):
     available = sorted(int(x.bitrate) for x in streams)
@@ -133,11 +146,8 @@ def select_quality(options, streams):
             selected = q
             break
     if not selected and selected != 0:
-        data = sorted(streams, key=lambda x:(x.bitrate, x.name()), reverse=True)
-        datas = []
-        for i in data:
-            datas.append([i.bitrate, i.name()])
-        quality = ", ".join("%s (%s)" % (str(x), str(y)) for x, y in datas)
+        data = sort_quality(streams)
+        quality = ", ".join("%s (%s)" % (str(x), str(y)) for x, y in data)
         log.error("Can't find that quality. Try one of: %s (or try --flexible-quality)", quality)
 
         sys.exit(4)
@@ -182,7 +192,7 @@ def filenamify(title):
     title = unicodedata.normalize('NFD', title)
 
     # Drop any non ascii letters/digits
-    title = re.sub(r'[^a-zA-Z0-9 -]', '', title)
+    title = re.sub(r'[^a-zA-Z0-9 -.]', '', title)
     # Drop any leading/trailing whitespace that may have appeared
     title = title.strip()
     # Lowercase
@@ -193,7 +203,7 @@ def filenamify(title):
     return title
 
 def download_thumbnail(options, url):
-    data = get_http_data(url)
+    error, data = get_http_data(url)
 
     filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
     tbn = "%s.tbn" % filename.group(1)

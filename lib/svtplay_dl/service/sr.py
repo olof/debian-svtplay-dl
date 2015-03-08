@@ -5,7 +5,6 @@
 # pylint: disable=E1103
 
 from __future__ import absolute_import
-import sys
 import json
 import re
 import copy
@@ -20,18 +19,29 @@ class Sr(Service, OpenGraphThumbMixin):
     supported_domains = ['sverigesradio.se']
 
     def get(self, options):
-        match = re.search(r'href="(/sida/[\.\/=a-z0-9&;\?]+\d+)" aria-label', self.get_urldata())
+        error, data = self.get_urldata()
+        if error:
+            log.error("Can't get the page")
+            return
+
+        if self.exclude(options):
+            return
+
+        match = re.search(r'href="(/sida/[\.\/=a-z0-9&;\?]+\d+)" aria-label', data)
         if not match:
             log.error("Can't find audio info")
-            sys.exit(2)
+            return
         path = quote_plus(match.group(1))
         dataurl = "http://sverigesradio.se/sida/ajax/getplayerinfo?url=%s&isios=false&playertype=html5" % path
-        data = get_http_data(dataurl)
+        error, data = get_http_data(dataurl)
+        if error:
+            log.error("Cant get stream info")
+            return
         playerinfo = json.loads(data)["playerInfo"]
         for i in playerinfo["AudioSources"]:
             url = i["Url"]
             if not url.startswith('http'):
                 url = 'http:%s' % url
-            yield HTTP(copy.copy(options), url, i["Quality"])
+            yield HTTP(copy.copy(options), url, i["Quality"]/1000)
 
 

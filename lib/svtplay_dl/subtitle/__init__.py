@@ -1,21 +1,46 @@
 import xml.etree.ElementTree as ET
 import json
 import re
-import os
 from svtplay_dl.log import log
-from svtplay_dl.utils import is_py2, get_http_data
+from svtplay_dl.utils import is_py2, is_py3, get_http_data
+from svtplay_dl.output import output
+
 
 class subtitle(object):
-    def __init__(self, url):
+    def __init__(self, options, subtype, url):
         self.url = url
         self.subtitle = None
+        self.options = options
+        self.subtype = subtype
 
-class subtitle_tt(subtitle):
-    def download(self, options):
-        self.subtitle = get_http_data(self.url)
+    def download(self):
+        error, subdata = get_http_data(self.url, cookiejar=self.options.cookies)
+        if error:
+            log.error("Can't download subtitle")
+            return
+
+        data = None
+        if self.subtype == "tt":
+            data = self.tt(subdata)
+        if self.subtype == "json":
+            data = self.json(subdata)
+        if self.subtype == "sami":
+            data = self.sami(subdata)
+        if self.subtype == "smi":
+            data = self.smi(subdata)
+        if self.subtype == "wrst":
+            data = self.wrst(subdata)
+
+        file_d = output(self.options, "srt")
+        if hasattr(file_d, "read") is False:
+            return
+        file_d.write(data)
+        file_d.close()
+
+    def tt(self, subdata):
         i = 1
         data = ""
-        tree = ET.ElementTree(ET.fromstring(self.subtitle))
+        tree = ET.ElementTree(ET.fromstring(subdata))
         xml = tree.find("{http://www.w3.org/2006/10/ttaf1}body").find("{http://www.w3.org/2006/10/ttaf1}div")
         plist = list(xml.findall("{http://www.w3.org/2006/10/ttaf1}p"))
         for node in plist:
@@ -33,71 +58,74 @@ class subtitle_tt(subtitle):
                     end = "%02d:%02d:%06.3f" % (int(begin[0]), int(begin[1]), sec)
                 else:
                     end = node.attrib["end"]
-                data += '%s\n%s --> %s\n' % (i, begin.replace(".",","), end.replace(".",","))
+                data += '%s\n%s --> %s\n' % (i, begin.replace(".", ","), end.replace(".", ","))
                 data = tt_text(node, data)
                 data += "\n"
                 i += 1
 
         if is_py2:
             data = data.encode('utf8')
-        save(options, data)
+        return data
 
-class subtitle_json(subtitle):
-    def download(self, options):
-        self.subtitle = get_http_data(self.url)
-        data = json.loads(self.subtitle)
+    def json(self, subdata):
+        data = json.loads(subdata)
         number = 1
         subs = ""
         for i in data:
             subs += "%s\n%s --> %s\n" % (number, timestr(int(i["startMillis"])), timestr(int(i["endMillis"])))
-            subs += "%s\n\n" % i["text"].encode("utf-8")
+            if is_py2:
+                subs += "%s\n\n" % i["text"].encode("utf-8")
+            else:
+                subs += "%s\n\n" % i["text"]
             number += 1
 
-        save(options, subs)
+        return subs
 
-class subtitle_sami(subtitle):
-    def download(self, options):
-        self.subtitle = get_http_data(self.url)
-        tree = ET.XML(self.subtitle)
+    def sami(self, subdata):
+        tree = ET.XML(subdata)
         subt = tree.find("Font")
         subs = ""
         n = 0
         for i in subt.getiterator():
             if i.tag == "Subtitle":
                 n = i.attrib["SpotNumber"]
+
                 if i.attrib["SpotNumber"] == "1":
-                    subs += "%s\n%s --> %s\n" % (i.attrib["SpotNumber"], i.attrib["TimeIn"], i.attrib["TimeOut"])
+                    subs += "%s\n%s --> %s\n" % (i.attrib["SpotNumber"], timecolon(i.attrib["TimeIn"]), timecolon(i.attrib["TimeOut"]))
                 else:
-                    subs += "\n%s\n%s --> %s\n" % (i.attrib["SpotNumber"], i.attrib["TimeIn"], i.attrib["TimeOut"])
+                    subs += "\n%s\n%s --> %s\n" % (i.attrib["SpotNumber"], timecolon(i.attrib["TimeIn"]), timecolon(i.attrib["TimeOut"]))
             else:
                 if int(n) > 0:
                     subs += "%s\n" % i.text
 
         if is_py2:
             subs = subs.encode('utf8')
-        save(options, subs)
+        return subs
 
-class subtitle_smi(subtitle):
-    def download(self, options):
-        self.subtitle = get_http_data(self.url)
-        recomp = re.compile(r'<SYNC Start=(\d+)>\s+<P Class=\w+>(.*)<br>\s+<SYNC Start=(\d+)>\s+<P Class=\w+>', re.M|re.I|re.U)
+    def smi(self, subdata):
+        if is_py3:
+            subdata = subdata.decode("latin1")
+        recomp = re.compile(r'<SYNC Start=(\d+)>\s+<P Class=\w+>(.*)\s+<SYNC Start=(\d+)>\s+<P Class=\w+>', re.M|re.I|re.U)
         number = 1
         subs = ""
-        for i in recomp.finditer(str(self.subtitle)):
+        TAG_RE = re.compile(r'<[^>]+>')
+        bad_char = re.compile(r'\x96')
+        for i in recomp.finditer(subdata):
             subs += "%s\n%s --> %s\n" % (number, timestr(i.group(1)), timestr(i.group(3)))
-            text = "%s\n\n" % i.group(2)
-            subs += text.replace("<br>", "\n")
+            text = "%s\n\n" % TAG_RE.sub('', i.group(2).replace("<br>", "\n"))
+            if text[0] == "\x0a":
+                text = text[1:]
+            subs += text
             number += 1
+        recomp = re.compile(r'\r')
+        text = bad_char.sub('-', recomp.sub('', subs)).replace('&quot;', '"')
+        return text
 
-        save(options, subs)
-
-class subtitle_wsrt(subtitle):
-    def download(self, options):
-        self.subtitle = get_http_data(self.url)
+    def wrst(self, subdata):
         recomp = re.compile(r"(\d+)\r\n([\d:\.]+ --> [\d:\.]+)?([^\r\n]+)?\r\n([^\r\n]+)\r\n(([^\r\n]*)\r\n)?")
         srt = ""
         subtract = False
-        for i in recomp.finditer(self.subtitle):
+        for i in recomp.finditer(subdata):
             number = int(i.group(1))
             match = re.search(r'(\d+):(\d+):([\d\.]+) --> (\d+):(\d+):([\d\.]+)', i.group(2))
             hour1 = int(match.group(1))
@@ -116,22 +144,7 @@ class subtitle_wsrt(subtitle):
             sub = re.sub('<[^>]*>', '', sub)
             srt += sub
 
-        save(options, srt)
-
-def save(options, data):
-    filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
-    if filename:
-        options.output = "%s.srt" % filename.group(1)
-    else:
-        options.output = "%s.srt" % options.output
-
-    log.info("Subtitle: %s", options.output)
-    if os.path.isfile(options.output) and not options.force:
-        log.info("File already exists. use --force to overwrite")
-        return
-    fd = open(options.output, "w")
-    fd.write(data)
-    fd.close()
+        return srt
 
 def timestr(msec):
     """
@@ -153,6 +166,10 @@ def timestr(msec):
 
     output = "%02d:%02d:%05.2f" % (hours, minutes, sec)
     return output.replace(".", ",")
+
+def timecolon(data):
+    match = re.search(r"(\d+:\d+:\d+):(\d+)", data)
+    return "%s,%s" % (match.group(1), match.group(2))
 
 def norm(name):
     if name[0] == "{":

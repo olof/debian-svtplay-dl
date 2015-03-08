@@ -1,7 +1,6 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import sys
 import re
 import copy
 import xml.etree.ElementTree as ET
@@ -16,12 +15,19 @@ class Mtvservices(Service):
     supported_domains = ['colbertnation.com', 'thedailyshow.com']
 
     def get(self, options):
-        match = re.search(r"mgid=\"(mgid.*[0-9]+)\" data-wi", self.get_urldata())
+        error, data = self.get_urldata()
+        if error:
+            log.error("Cant get page")
+            return
+        match = re.search(r"mgid=\"(mgid.*[0-9]+)\" data-wi", data)
         if not match:
             log.error("Can't find video file")
-            sys.exit(2)
+            return
         url = "http://media.mtvnservices.com/player/html5/mediagen/?uri=%s" % match.group(1)
-        data = get_http_data(url)
+        error, data = get_http_data(url)
+        if error:
+            log.error("Cant get stream info")
+            return
         start = data.index("<?xml version=")
         data = data[start:]
         xml = ET.XML(data)
@@ -30,6 +36,9 @@ class Mtvservices(Service):
             sa = list(ss.getiterator("rendition"))
         else:
             sa = list(ss.iter("rendition"))
+
+        if self.exclude(options):
+            return
 
         for i in sa:
             temp = i.find("src").text.index("gsp.comedystor")

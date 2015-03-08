@@ -1,7 +1,6 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import sys
 import time
 
 from svtplay_dl.output import progress, output # FIXME use progressbar() instead
@@ -21,8 +20,7 @@ class HTTP(VideoRetriever):
             response = urlopen(request)
         except HTTPError as e:
             log.error("Something wrong with that url")
-            log.error("Error code: %s", e.code)
-            sys.exit(5)
+            return
         try:
             total_size = response.info()['Content-Length']
         except KeyError:
@@ -30,7 +28,7 @@ class HTTP(VideoRetriever):
         total_size = int(total_size)
         bytes_so_far = 0
 
-        file_d = output(self.options, self.url, "mp4")
+        file_d = output(self.options, "mp4")
         if hasattr(file_d, "read") is False:
             return
 

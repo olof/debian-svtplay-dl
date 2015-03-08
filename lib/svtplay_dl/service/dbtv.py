@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 import re
-import sys
 import json
 import copy
 
@@ -14,13 +13,20 @@ class Dbtv(Service, OpenGraphThumbMixin):
     supported_domains = ['dbtv.no']
 
     def get(self, options):
-        data = self.get_urldata()
+        error, data = self.get_urldata()
+        if error:
+            log.error("Can't download webpage")
+            return
+
+        if self.exclude(options):
+            return
+
         parse = urlparse(self.url)
         vidoid = parse.path[parse.path.rfind("/")+1:]
         match = re.search(r'JSONdata = ({.*});', data)
         if not match:
             log.error("Cant find json data")
-            sys.exit(2)
+            return
         janson = json.loads(match.group(1))
         playlist = janson["playlist"]
         for i in playlist:
