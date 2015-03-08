@@ -77,7 +77,7 @@ class ETA(object):
         return str(timedelta(seconds=int(elm_time * self.left)))
 
 
-def progress(byte, total, extra = ""):
+def progress(byte, total, extra=""):
     """ Print some info about how much we have downloaded """
     if total == 0:
         progresstr = "Downloaded %dkB bytes" % (byte >> 10)
@@ -113,22 +113,29 @@ def progressbar(total, pos, msg=""):
 
     progress_stream.write(fmt % (pos, total, bar, msg))
 
-def output(options, filename, extention="mp4", openfd=True):
+def output(options, extention="mp4", openfd=True):
     if is_py3:
         file_d = io.IOBase
     else:
         file_d = file
 
     if options.output != "-":
-        ext = re.search(r"(\.[a-z0-9]+)$", filename)
+        ext = re.search(r"(\.[a-z0-9]+)$", options.output)
         if not ext:
             options.output = "%s.%s" % (options.output, extention)
+        if extention == "srt" and ext:
+            options.output = "%s.srt" % options.output[:options.output.rfind(ext.group(1))]
         log.info("Outfile: %s", options.output)
-        if (os.path.isfile(options.output) or \
-            findexpisode(os.path.dirname(os.path.realpath(options.output)), options.service, os.path.basename(options.output))) and \
-            not options.force:
-            log.error("File already exists. Use --force to overwrite")
-            return None
+        if os.path.isfile(options.output) or \
+                findexpisode(os.path.dirname(os.path.realpath(options.output)), options.service, os.path.basename(options.output)):
+            if extention == "srt":
+                if not options.force_subtitle:
+                    log.error("File already exists. Use --force-subtitle to overwrite")
+                    return None
+            else:
+                if not options.force:
+                    log.error("File already exists. Use --force to overwrite")
+                    return None
         if openfd:
             file_d = open(options.output, "wb")
     else:
@@ -141,16 +148,21 @@ def output(options, filename, extention="mp4", openfd=True):
     return file_d
 
 def findexpisode(directory, service, name):
-    match = re.search(r"-(\w+)-\w+.(?!srt)\w{2,3}$", name)
+    match = re.search(r"-(\w+)-\w+.(\w{2,3})$", name)
     if not match:
         return False
     videoid = match.group(1)
+    extention = match.group(2)
     files = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
     for i in files:
-        match = re.search(r"-(\w+)-\w+.(?!srt)\w{2,3}$", i)
+        match = re.search(r"-(\w+)-\w+.(\w{2,3})$", i)
         if match:
             if service:
-                if name.find(service) and match.group(1) == videoid:
-                    return True
+                if extention == "srt":
+                    if name.find(service) and match.group(1) == videoid and match.group(2) == extention:
+                        return True
+                elif match.group(2) != "srt":
+                    if name.find(service) and match.group(1) == videoid:
+                        return True
 
     return False

@@ -1,7 +1,6 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import sys
 import re
 import copy
 import xml.etree.ElementTree as ET
@@ -17,25 +16,35 @@ class Lemonwhale(Service):
 
     def get(self, options):
         vid = None
-        data = self.get_urldata()
+        error, data = self.get_urldata()
+        if error:
+            log.error("Can't get data from that page")
+            return
+
+        if self.exclude(options):
+            return
+
         match = re.search(r'video url-([^"]+)', data)
         if not match:
-            match = re.search(r'embed.jsp\?id=([^&]+)&', data)
+            match = re.search(r'embed.jsp\?([^"]+)"', self.get_urldata()[1])
             if not match:
-                log.error("Cant find video id")
-                sys.exit(2)
+                log.error("Can't find video id")
+                return
             vid = match.group(1)
         if not vid:
             path = unquote_plus(match.group(1))
-            data = get_http_data("http://www.svd.se%s" % path)
-            match = re.search(r'embed.jsp\?id=([^&]+)&', data)
+            error, data = get_http_data("http://www.svd.se%s" % path)
+            match = re.search(r'embed.jsp\?([^"]+)', data)
             if not match:
-                log.error("Cant find video id2")
-                sys.exit(2)
+                log.error("Can't find video id")
+                return
             vid = match.group(1)
 
-        url = "http://amz.lwcdn.com/api/cache/VideoCache.jsp?id=%s" % vid
-        data = get_http_data(url)
+        url = "http://amz.lwcdn.com/api/cache/VideoCache.jsp?%s" % vid
+        error, data = get_http_data(url)
+        if error:
+            log.error("Cant download video info")
+            return
         xml = ET.XML(data)
         videofile = xml.find("{http://www.lemonwhale.com/xml11}VideoFile")
         mediafiles = videofile.find("{http://www.lemonwhale.com/xml11}MediaFiles")

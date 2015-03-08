@@ -1,7 +1,6 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import sys
 import re
 import copy
 import xml.etree.ElementTree as ET
@@ -21,17 +20,27 @@ class Hbo(Service):
             other = parse.fragment
         except KeyError:
             log.error("Something wrong with that url")
-            sys.exit(2)
+            return
+
+        if self.exclude(options):
+            return
+
         match = re.search("^/(.*).html", other)
         if not match:
             log.error("Cant find video file")
-            sys.exit(2)
+            return
         url = "http://www.hbo.com/data/content/%s.xml" % match.group(1)
-        data = get_http_data(url)
+        error, data = get_http_data(url)
+        if error:
+            log.error("Cant get stream info")
+            return
         xml = ET.XML(data)
         videoid = xml.find("content")[1].find("videoId").text
         url = "http://render.cdn.hbo.com/data/content/global/videos/data/%s.xml" % videoid
-        data = get_http_data(url)
+        error, data = get_http_data(url)
+        if error:
+            log.error("Cant get stream info")
+            return
         xml = ET.XML(data)
         ss = xml.find("videos")
         if is_py2_old:

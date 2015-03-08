@@ -3,7 +3,6 @@
 from __future__ import absolute_import
 import re
 import json
-import sys
 import copy
 import xml.etree.ElementTree as ET
 
@@ -12,7 +11,7 @@ from svtplay_dl.utils import get_http_data
 from svtplay_dl.fetcher.rtmp import RTMP
 from svtplay_dl.fetcher.hls import HLS, hlsparse
 from svtplay_dl.log import log
-from svtplay_dl.subtitle import subtitle_tt
+from svtplay_dl.subtitle import subtitle
 
 class Urplay(Service, OpenGraphThumbMixin):
     supported_domains = ['urplay.se', 'ur.se']
@@ -22,13 +21,21 @@ class Urplay(Service, OpenGraphThumbMixin):
         self.subtitle = None
 
     def get(self, options):
-        match = re.search(r"urPlayer.init\((.*)\);", self.get_urldata())
+        error, data = self.get_urldata()
+        if error:
+            log.error("Can't get the page")
+            return
+        match = re.search(r"urPlayer.init\((.*)\);", data)
         if not match:
             log.error("Can't find json info")
-            sys.exit(2)
+            return
+
+        if self.exclude(options):
+            return
+
         data = match.group(1)
         jsondata = json.loads(data)
-        yield subtitle_tt(jsondata["subtitles"].split(",")[0])
+        yield subtitle(copy.copy(options), "tt", jsondata["subtitles"].split(",")[0])
         basedomain = jsondata["streaming_config"]["streamer"]["redirect"]
         http = "http://%s/%s" % (basedomain, jsondata["file_html5"])
         hd = None
@@ -56,11 +63,19 @@ class Urplay(Service, OpenGraphThumbMixin):
 
     def find_all_episodes(self, options):
         match = re.search(r'<link rel="alternate" type="application/rss\+xml" [^>]*href="([^"]+)"',
-                          self.get_urldata())
+                          self.get_urldata()[1])
         if match is None:
             log.error("Couldn't retrieve episode list")
-            sys.exit(2)
+            return
         url = "http://urplay.se%s" % match.group(1).replace("&amp;", "&")
-        xml = ET.XML(get_http_data(url))
+        xml = ET.XML(get_http_data(url)[1])
 
-        return sorted(x.text for x in xml.findall(".//item/link"))
+        episodes = [x.text for x in xml.findall(".//item/link")]
+        episodes_new = []
+        n = 0
+        for i in episodes:
+            if n == options.all_last:
+                break
+            episodes_new.append(i)
+            n += 1
+        return episodes_new

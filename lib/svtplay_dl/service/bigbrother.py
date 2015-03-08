@@ -1,7 +1,6 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import sys
 import re
 import json
 import copy
@@ -16,42 +15,52 @@ class Bigbrother(Service, OpenGraphThumbMixin):
     supported_domains = ["bigbrother.se"]
 
     def get(self, options):
-        match = re.search(r'id="(bcPl[^"]+)"', self.get_urldata())
+        error, data = self.get_urldata()
+        if error:
+            log.error("Can't download page.")
+            return
+
+        if self.exclude(options):
+            return
+
+        match = re.search(r'id="(bcPl[^"]+)"', data)
         if not match:
             log.error("Can't find flash id.")
-            sys.exit(2)
+            return
         flashid = match.group(1)
 
-        match = re.search(r'playerID" value="([^"]+)"', self.get_urldata())
+        match = re.search(r'playerID" value="([^"]+)"', self.get_urldata()[1])
         if not match:
             log.error("Can't find playerID")
-            sys.exit(2)
+            return
         playerid = match.group(1)
 
-        match = re.search(r'playerKey" value="([^"]+)"', self.get_urldata())
+        match = re.search(r'playerKey" value="([^"]+)"', self.get_urldata()[1])
         if not match:
             log.error("Can't find playerKey")
-            sys.exit(2)
+            return
         playerkey = match.group(1)
 
-        match = re.search(r'videoPlayer" value="([^"]+)"', self.get_urldata())
+        match = re.search(r'videoPlayer" value="([^"]+)"', self.get_urldata()[1])
         if not match:
             log.error("Can't find videoPlayer info")
-            sys.exit(2)
+            return
         videoplayer = match.group(1)
 
         dataurl = "http://c.brightcove.com/services/viewer/htmlFederated?flashID=%s&playerID=%s&playerKey=%s&isVid=true&isUI=true&dynamicStreaming=true&@videoPlayer=%s" % (flashid, playerid, playerkey, videoplayer)
-        data = get_http_data(dataurl)
+        error, data = get_http_data(dataurl)
+        if error:
+            log.error("Cant download video info")
+            return
         match = re.search(r'experienceJSON = ({.*});', data)
         if not match:
             log.error("Can't find json data")
-            sys.exit(2)
+            return
         jsondata = json.loads(match.group(1))
         renditions = jsondata["data"]["programmedContent"]["videoPlayer"]["mediaDTO"]["renditions"]
         for i in renditions:
             if i["defaultURL"].endswith("f4m"):
-                manifest = "%s?hdcore=3.3.0" % i["defaultURL"]
-                streams = hdsparse(copy.copy(options), manifest)
+                streams = hdsparse(copy.copy(options), i["defaultURL"])
                 if streams:
                     for n in list(streams.keys()):
                         yield streams[n]

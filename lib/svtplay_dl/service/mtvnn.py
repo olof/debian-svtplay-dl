@@ -1,5 +1,4 @@
 from __future__ import absolute_import
-import sys
 import re
 import os
 import xml.etree.ElementTree as ET
@@ -14,13 +13,20 @@ class Mtvnn(Service, OpenGraphThumbMixin):
     supported_domains = ['nickelodeon.se', "nickelodeon.nl", "nickelodeon.no"]
 
     def get(self, options):
-        match = re.search(r'mrss\s+:\s+"([^"]+)"', self.get_urldata())
+        error, data = self.get_urldata()
+        if error:
+            log.error("Can't get the page")
+            return
+        match = re.search(r'mrss\s+:\s+"([^"]+)"', data)
         if not match:
             log.error("Can't find id for the video")
-            sys.exit(2)
-        swfurl = re.search(r'embedSWF\( "([^"]+)"', self.get_urldata())
+            return
+        swfurl = re.search(r'embedSWF\( "([^"]+)"', self.get_urldata()[1])
         options.other = "-W %s" % swfurl.group(1)
-        data = get_http_data(match.group(1))
+        error, data = get_http_data(match.group(1))
+        if error:
+            log.error("Cant get video info")
+            return
         xml = ET.XML(data)
         mediagen = xml.find("channel").find("item").find("{http://search.yahoo.com/mrss/}group")
         title = xml.find("channel").find("item").find("title").text
@@ -30,8 +36,15 @@ class Mtvnn(Service, OpenGraphThumbMixin):
                 options.output = "%s/%s" % (directory, title)
             else:
                 options.output = title
+
+        if self.exclude(options):
+            return
+
         contenturl = mediagen.find("{http://search.yahoo.com/mrss/}content").attrib["url"]
-        content = get_http_data(contenturl)
+        error, content = get_http_data(contenturl)
+        if error:
+            log.error("Cant download stream info")
+            return
         xml = ET.XML(content)
         ss = xml.find("video").find("item")
         if is_py2_old:
@@ -43,15 +56,15 @@ class Mtvnn(Service, OpenGraphThumbMixin):
             yield RTMP(options, i.find("src").text, i.attrib["bitrate"])
 
     def find_all_episodes(self, options):
-        match = re.search(r"data-franchise='([^']+)'", self.get_urldata())
+        match = re.search(r"data-franchise='([^']+)'", self.get_urldata()[1])
         if match is None:
             log.error("Couldn't program id")
-            sys.exit(2)
+            return
         programid = match.group(1)
-        match = re.findall(r"<li class='(divider playlist-item|playlist-item)'( data-item-id='([^']+)')?", self.get_urldata())
+        match = re.findall(r"<li class='(divider playlist-item|playlist-item)'( data-item-id='([^']+)')?", self.get_urldata()[1])
         if not match:
             log.error("Couldn't retrieve episode list")
-            sys.exit(2)
+            return
         episodNr = []
         for i in match:
             if i[0] == "playlist-item":
@@ -60,6 +73,10 @@ class Mtvnn(Service, OpenGraphThumbMixin):
                 break
 
         episodes = []
+        n = 0
         for i in sorted(episodNr):
+            if n == options.all_last:
+                break
             episodes.append("http://www.nickelodeon.se/serier/%s-something/videos/%s-something" % (programid, i))
+            n += 1
         return episodes

@@ -5,7 +5,6 @@
 # pylint: disable=E1103
 
 from __future__ import absolute_import
-import sys
 import re
 import json
 import copy
@@ -17,7 +16,7 @@ from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import RTMP
 from svtplay_dl.fetcher.hds import hdsparse
 from svtplay_dl.fetcher.hls import HLS, hlsparse
-from svtplay_dl.subtitle import subtitle_sami
+from svtplay_dl.subtitle import subtitle
 
 class Viaplay(Service, OpenGraphThumbMixin):
     supported_domains = [
@@ -37,7 +36,9 @@ class Viaplay(Service, OpenGraphThumbMixin):
         to scrape it from the HTML document. Returns None in case it's
         unable to extract the ID at all.
         """
-        html_data = self.get_urldata()
+        error, html_data = self.get_urldata()
+        if error:
+            return None
         match = re.search(r'data-video-id="([0-9]+)"', html_data)
         if match:
             return match.group(1)
@@ -49,30 +50,40 @@ class Viaplay(Service, OpenGraphThumbMixin):
         match = re.search(r'/\w+/(\d+)', parse.path)
         if match:
             return match.group(1)
-
         return None
 
     def get(self, options):
         vid = self._get_video_id()
         if vid is None:
-            log.error("Cant find video file")
-            sys.exit(2)
+            log.error("Can't find video file for: %s", self.url)
+            return
 
         url = "http://playapi.mtgx.tv/v3/videos/%s" % vid
         options.other = ""
-        data = get_http_data(url)
+        error, data = get_http_data(url)
+        if error:
+            log.error("Can't play this because the video is either not found or geoblocked.")
+            return
         dataj = json.loads(data)
         if "msg" in dataj:
-            log.error("%s" % dataj["msg"])
+            log.error(dataj["msg"])
             return
 
         if dataj["type"] == "live":
             options.live = True
 
-        if dataj["sami_path"]:
-            yield subtitle_sami(dataj["sami_path"])
+        if self.exclude(options):
+            return
 
-        streams = get_http_data("http://playapi.mtgx.tv/v3/videos/stream/%s" % vid)
+        if dataj["sami_path"]:
+            yield subtitle(copy.copy(options), "sami", dataj["sami_path"])
+        if dataj["subtitles_for_hearing_impaired"]:
+            yield subtitle(copy.copy(options), "sami", dataj["subtitles_for_hearing_impaired"])
+
+        error, streams = get_http_data("http://playapi.mtgx.tv/v3/videos/stream/%s" % vid)
+        if error:
+            log.error("Can't play this because the video is either not found or geoblocked.")
+            return
         streamj = json.loads(streams)
 
         if "msg" in streamj:
@@ -81,9 +92,8 @@ class Viaplay(Service, OpenGraphThumbMixin):
 
         if streamj["streams"]["medium"]:
             filename = streamj["streams"]["medium"]
-            if filename[len(filename)-3:] == "f4m":
-                manifest = "%s?hdcore=2.8.0&g=hejsan" % filename
-                streams = hdsparse(copy.copy(options), manifest)
+            if filename.endswith("f4m"):
+                streams = hdsparse(copy.copy(options), filename)
                 if streams:
                     for n in list(streams.keys()):
                         yield streams[n]
@@ -91,8 +101,8 @@ class Viaplay(Service, OpenGraphThumbMixin):
                 parse = urlparse(filename)
                 match = re.search("^(/[^/]+)/(.*)", parse.path)
                 if not match:
-                    log.error("Somthing wrong with rtmpparse")
-                    sys.exit(2)
+                    log.error("Something wrong with rtmpparse")
+                    return
                 filename = "%s://%s:%s%s" % (parse.scheme, parse.hostname, parse.port, match.group(1))
                 path = "-y %s" % match.group(2)
                 options.other = "-W http://flvplayer.viastream.viasat.tv/flvplayer/play/swf/player.swf %s" % path
@@ -100,16 +110,27 @@ class Viaplay(Service, OpenGraphThumbMixin):
 
         if streamj["streams"]["hls"]:
             streams = hlsparse(streamj["streams"]["hls"])
-            for n in list(streams.keys()):
-                yield HLS(copy.copy(options), streams[n], n)
+            if streams:
+                for n in list(streams.keys()):
+                    yield HLS(copy.copy(options), streams[n], n)
 
     def find_all_episodes(self, options):
-        format_id = re.search(r'data-format-id="(\d+)"', self.get_urldata())
+        format_id = re.search(r'data-format-id="(\d+)"', self.get_urldata()[1])
         if not format_id:
-            log.error("Can't find video info")
-            sys.exit(2)
-        data = get_http_data("http://playapi.mtgx.tv/v1/sections?sections=videos.one,seasons.videolist&format=%s" % format_id.group(1))
+            log.error("Can't find video info for all episodes")
+            return
+        error, data = get_http_data("http://playapi.mtgx.tv/v1/sections?sections=videos.one,seasons.videolist&format=%s" % format_id.group(1))
+        if error:
+            log.error("Cant get stream info")
+            return
         jsondata = json.loads(data)
         videos = jsondata["_embedded"]["sections"][1]["_embedded"]["seasons"][0]["_embedded"]["episodelist"]["_embedded"]["videos"]
 
-        return sorted(x["sharing"]["url"] for x in videos)
+        n = 0
+        episodes = []
+        for i in videos:
+            if n == options.all_last:
+                break
+            episodes.append(i["sharing"]["url"])
+            n += 1
+        return episodes

@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 import re
-import sys
 import json
 import copy
 import os
@@ -17,15 +16,22 @@ class Vg(Service, OpenGraphThumbMixin):
     supported_domains = ['vg.no', 'vgtv.no']
 
     def get(self, options):
-        match = re.search(r'data-videoid="([^"]+)"', self.get_urldata())
+        error, data = self.get_urldata()
+        if error:
+            log.error("Can't get the page")
+            return
+        match = re.search(r'data-videoid="([^"]+)"', data)
         if not match:
             parse = urlparse(self.url)
             match = re.search(r'video/(\d+)/', parse.fragment)
             if not match:
-                log.error("Can't find video id")
-                sys.exit(2)
+                log.error("Can't find video file for: %s", self.url)
+                return
         videoid = match.group(1)
-        data = get_http_data("http://svp.vg.no/svp/api/v1/vgtv/assets/%s?appName=vgtv-website" % videoid)
+        error, data = get_http_data("http://svp.vg.no/svp/api/v1/vgtv/assets/%s?appName=vgtv-website" % videoid)
+        if error:
+            log.error("Cant get video info")
+            return
         jsondata = json.loads(data)
 
         if options.output_auto:
@@ -36,10 +42,12 @@ class Vg(Service, OpenGraphThumbMixin):
                 options.output = "%s/%s" % (directory, title)
             else:
                 options.output = title
+
+        if self.exclude(options):
+            return
+
         if "hds" in jsondata["streamUrls"]:
-            parse = urlparse(jsondata["streamUrls"]["hds"])
-            manifest = "%s://%s%s?%s&hdcore=3.3.0" % (parse.scheme, parse.netloc, parse.path, parse.query)
-            streams = hdsparse(copy.copy(options), manifest)
+            streams = hdsparse(copy.copy(options), jsondata["streamUrls"]["hds"])
             if streams:
                 for n in list(streams.keys()):
                     yield streams[n]

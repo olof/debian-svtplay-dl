@@ -11,12 +11,71 @@ from optparse import OptionParser
 
 from svtplay_dl.error import UIException
 from svtplay_dl.log import log
-from svtplay_dl.utils import decode_html_entities, filenamify, select_quality
+from svtplay_dl.utils import decode_html_entities, filenamify, select_quality, list_quality
+from svtplay_dl.utils.urllib import URLError
 from svtplay_dl.service import service_handler, Generic
 from svtplay_dl.fetcher import VideoRetriever
 from svtplay_dl.subtitle import subtitle
 
-__version__ = "0.9.2014.11.16"
+from svtplay_dl.service.aftonbladet import Aftonbladet
+from svtplay_dl.service.bambuser import Bambuser
+from svtplay_dl.service.bigbrother import Bigbrother
+from svtplay_dl.service.dbtv import Dbtv
+from svtplay_dl.service.disney import Disney
+from svtplay_dl.service.dr import Dr
+from svtplay_dl.service.expressen import Expressen
+from svtplay_dl.service.hbo import Hbo
+from svtplay_dl.service.justin import Justin
+from svtplay_dl.service.kanal5 import Kanal5
+from svtplay_dl.service.lemonwhale import Lemonwhale
+from svtplay_dl.service.mtvnn import Mtvnn
+from svtplay_dl.service.mtvservices import Mtvservices
+from svtplay_dl.service.nrk import Nrk
+from svtplay_dl.service.oppetarkiv import OppetArkiv
+from svtplay_dl.service.picsearch import Picsearch
+from svtplay_dl.service.qbrick import Qbrick
+from svtplay_dl.service.radioplay import Radioplay
+from svtplay_dl.service.ruv import Ruv
+from svtplay_dl.service.raw import Raw
+from svtplay_dl.service.sr import Sr
+from svtplay_dl.service.svtplay import Svtplay
+from svtplay_dl.service.tv4play import Tv4play
+from svtplay_dl.service.urplay import Urplay
+from svtplay_dl.service.vg import Vg
+from svtplay_dl.service.viaplay import Viaplay
+from svtplay_dl.service.vimeo import Vimeo
+from svtplay_dl.service.youplay import Youplay
+
+__version__ = "0.10.2015.01.28"
+
+sites = [
+    Aftonbladet,
+    Bambuser,
+    Bigbrother,
+    Dbtv,
+    Disney,
+    Dr,
+    Expressen,
+    Hbo,
+    Justin,
+    Lemonwhale,
+    Kanal5,
+    Mtvservices,
+    Mtvnn,
+    Nrk,
+    Qbrick,
+    Picsearch,
+    Ruv,
+    Radioplay,
+    Sr,
+    Svtplay,
+    OppetArkiv,
+    Tv4play,
+    Urplay,
+    Viaplay,
+    Vimeo,
+    Vg,
+    Youplay]
 
 class Options(object):
     """
@@ -48,6 +107,7 @@ class Options(object):
         self.force = False
         self.quality = 0
         self.flexibleq = None
+        self.list_quality = False
         self.hls = False
         self.other = None
         self.subtitle = False
@@ -55,20 +115,30 @@ class Options(object):
         self.password = None
         self.thumbnail = False
         self.all_episodes = False
+        self.all_last = -1
         self.force_subtitle = False
         self.preferred = None
         self.verbose = False
         self.output_auto = False
         self.service = None
+        self.cookies = None
+        self.exclude = None
 
 def get_media(url, options):
 
-    stream = service_handler(url)
+    stream = service_handler(sites, url)
     if not stream:
-        url, stream = Generic().get(url)
+        try:
+            url, stream = Generic().get(sites, url)
+        except URLError as e:
+            log.error("Cant find that page: %s", e.reason)
+            return
     if not stream:
-        log.error("That site is not supported. Make a ticket or send a message")
-        sys.exit(2)
+        if url.find(".f4m") > 0 or url.find(".m3u8") > 0:
+            stream = Raw(url)
+        if not stream:
+            log.error("That site is not supported. Make a ticket or send a message")
+            sys.exit(2)
 
     if options.all_episodes:
         if options.output and os.path.isfile(options.output):
@@ -78,27 +148,41 @@ def get_media(url, options):
             try:
                 os.makedirs(options.output)
             except OSError as e:
-                log.error("%s: %s" % (e.strerror,  e.filename))
+                log.error("%s: %s" % (e.strerror, e.filename))
                 return
 
         episodes = stream.find_all_episodes(options)
-
+        if episodes is None:
+            return
         for idx, o in enumerate(episodes):
             if o == url:
                 substream = stream
             else:
-                substream = service_handler(o)
+                substream = service_handler(sites, o)
 
             log.info("Episode %d of %d", idx + 1, len(episodes))
 
-            # get_one_media overwrites options.output...
-            get_one_media(substream, copy.copy(options))
+            try:
+                # get_one_media overwrites options.output...
+                get_one_media(substream, copy.copy(options))
+            except URLError as e:
+                log.error("Cant find that page: %s", e.reason)
+                return
     else:
-        get_one_media(stream, options)
+        try:
+            get_one_media(stream, options)
+        except URLError as e:
+            log.error("Cant find that page: %s", e.reason)
+            sys.exit(2)
 
 def get_one_media(stream, options):
     if not options.output or os.path.isdir(options.output):
-        data = stream.get_urldata()
+        error, data = stream.get_urldata()
+        if error:
+            log.error("Cant find that page")
+            return
+        if data is None:
+            return
         match = re.search(r"(?i)<title[^>]*>\s*(.*?)\s*</title>", data, re.S)
         if match:
             options.output_auto = True
@@ -111,7 +195,7 @@ def get_one_media(stream, options):
 
     if platform.system() == "Windows":
         # ugly hack. replace \ with / or add extra \ because c:\test\kalle.flv will add c:_tab_est\kalle.flv
-        if options.output.find("\\") > 0:
+        if options.output and options.output.find("\\") > 0:
             options.output = options.output.replace("\\", "/")
 
     videos = []
@@ -120,7 +204,7 @@ def get_one_media(stream, options):
     for i in streams:
         if isinstance(i, VideoRetriever):
             if options.preferred:
-                if options.preferred == i.name():
+                if options.preferred.lower() == i.name():
                     videos.append(i)
             else:
                 videos.append(i)
@@ -129,16 +213,19 @@ def get_one_media(stream, options):
 
     if options.subtitle and options.output != "-":
         if subs:
-            subs[0].download(copy.copy(options))
+            subs[0].download()
         if options.force_subtitle:
             return
 
     if len(videos) == 0:
         log.error("Can't find any streams for that url")
     else:
+        if options.list_quality:
+            list_quality(videos)
+            return
         stream = select_quality(options, videos)
         log.info("Selected to download %s, bitrate: %s",
-            stream.name(), stream.bitrate)
+                 stream.name(), stream.bitrate)
         try:
             stream.download()
         except UIException as e:
@@ -176,16 +263,16 @@ def setup_log(silent, verbose=False):
 
 def main():
     """ Main program """
-    usage = "usage: %prog [options] url"
+    usage = "Usage: %prog [options] url"
     parser = OptionParser(usage=usage, version=__version__)
     parser.add_option("-o", "--output",
-                      metavar="OUTPUT", help="Outputs to the given filename.")
+                      metavar="OUTPUT", help="outputs to the given filename")
     parser.add_option("-r", "--resume",
                       action="store_true", dest="resume", default=False,
-                      help="Resume a download (RTMP based ones)")
+                      help="resume a download (RTMP based ones)")
     parser.add_option("-l", "--live",
                       action="store_true", dest="live", default=False,
-                      help="Enable for live streams (RTMP based ones)")
+                      help="enable for live streams (RTMP based ones)")
     parser.add_option("-s", "--silent",
                       action="store_true", dest="silent", default=False)
     parser.add_option("-v", "--verbose",
@@ -193,34 +280,45 @@ def main():
     parser.add_option("-f", "--force",
                       action="store_true", dest="force", default=False)
     parser.add_option("-q", "--quality", default=0,
-                      metavar="quality", help="Choose what format to download.\nIt will download the best format by default")
+                      metavar="quality", help="choose what format to download based on bitrate / video resolution."
+                                              "it will download the best format by default")
     parser.add_option("-Q", "--flexible-quality", default=0,
-                      metavar="amount", dest="flexibleq", help="Allow given quality (as above) to differ by an amount.")
+                      metavar="amount", dest="flexibleq", help="allow given quality (as above) to differ by an amount")
+    parser.add_option("--list-quality", dest="list_quality", action="store_true", default=False,
+                      help="list the quality for a video")
     parser.add_option("-H", "--hls",
-                      action="store_true", dest="hls", default=False, help="obsolete use -P")
+                      action="store_true", dest="hls", default=False, help="obsolete use -P hls")
     parser.add_option("-S", "--subtitle",
                       action="store_true", dest="subtitle", default=False,
-                      help="Download subtitle from the site if available.")
+                      help="download subtitle from the site if available")
     parser.add_option("--force-subtitle", dest="force_subtitle", default=False,
-                      action="store_true", help="Download only subtitle if its used with -S")
+                      action="store_true", help="download only subtitle if its used with -S")
     parser.add_option("-u", "--username", default=None,
-                      help="Username")
+                      help="username")
     parser.add_option("-p", "--password", default=None,
-                      help="Password")
+                      help="password")
     parser.add_option("-t", "--thumbnail",
                       action="store_true", dest="thumbnail", default=False,
-                      help="Download thumbnail from the site if available.")
+                      help="download thumbnail from the site if available")
     parser.add_option("-A", "--all-episodes",
                       action="store_true", dest="all_episodes", default=False,
-                      help="Try to download all episodes.")
+                      help="try to download all episodes")
+    parser.add_option("--all-last", dest="all_last", default=-1, type=int,
+                      metavar="NN", help="get last NN episodes instead of all episodes")
     parser.add_option("-P", "--preferred", default=None,
                       metavar="preferred", help="preferred download method (rtmp, hls or hds)")
+    parser.add_option("--exclude", dest="exclude", default=None,
+                      metavar="WORD,WORD2", help="exclude videos with the WORD(s) in the filename. comma seperated.")
     (options, args) = parser.parse_args()
     if not args:
         parser.print_help()
         sys.exit(0)
     if len(args) != 1:
-        parser.error("incorrect number of arguments")
+        parser.error("Incorrect number of arguments")
+    if options.exclude:
+        options.exclude = options.exclude.split(",")
+    if options.force_subtitle:
+        options.subtitle = True
     options = mergeParserOption(Options(), options)
     setup_log(options.silent, options.verbose)
 
@@ -243,13 +341,16 @@ def mergeParserOption(options, parser):
     options.force = parser.force
     options.quality = parser.quality
     options.flexibleq = parser.flexibleq
+    options.list_quality = parser.list_quality
     options.hls = parser.hls
     options.subtitle = parser.subtitle
     options.username = parser.username
     options.password = parser.password
     options.thumbnail = parser.thumbnail
     options.all_episodes = parser.all_episodes
+    options.all_last = parser.all_last
     options.force_subtitle = parser.force_subtitle
     options.preferred = parser.preferred
     options.verbose = parser.verbose
+    options.exclude = parser.exclude
     return options

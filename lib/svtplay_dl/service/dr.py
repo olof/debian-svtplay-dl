@@ -3,7 +3,6 @@
 from __future__ import absolute_import
 import re
 import json
-import sys
 import copy
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
@@ -17,11 +16,21 @@ class Dr(Service, OpenGraphThumbMixin):
     supported_domains = ['dr.dk']
 
     def get(self, options):
-        data = self.get_urldata()
+        error, data = self.get_urldata()
+        if error:
+            log.error("Can't download page.")
+            return
+
+        if self.exclude(options):
+            return
+
         match = re.search(r'resource:[ ]*"([^"]*)",', data)
         if match:
             resource_url = match.group(1)
-            resource_data = get_http_data(resource_url)
+            error, resource_data = get_http_data(resource_url)
+            if error:
+                log.error("Can't get resource data")
+                return
             resource = json.loads(resource_data)
             streams = find_stream(options, resource)
             for i in streams:
@@ -30,9 +39,12 @@ class Dr(Service, OpenGraphThumbMixin):
             match = re.search(r'resource="([^"]*)"', data)
             if not match:
                 log.error("Cant find resource info for this video")
-                sys.exit(2)
+                return
             resource_url = "%s" % match.group(1)
-            resource_data = get_http_data(resource_url)
+            error, resource_data = get_http_data(resource_url)
+            if error:
+                log.error("Can't get resource data")
+                return
             resource = json.loads(resource_data)
 
             if "Data" in resource:
@@ -42,8 +54,7 @@ class Dr(Service, OpenGraphThumbMixin):
             else:
                 for stream in resource['Links']:
                     if stream["Target"] == "HDS":
-                        manifest = "%s?hdcore=2.8.0&g=hejsan" % stream["Uri"]
-                        streams = hdsparse(copy.copy(options), manifest)
+                        streams = hdsparse(copy.copy(options), stream["Uri"])
                         if streams:
                             for n in list(streams.keys()):
                                 yield streams[n]
