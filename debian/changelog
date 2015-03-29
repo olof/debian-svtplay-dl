@@ -1,3 +1,10 @@
+svtplay-dl (0.10.2015.03.25-1) experimental; urgency=medium
+
+  * Imported Upstream version 0.10.2015.03.25 (Closes: #780426)
+   - With this release, build show be reproducible.
+
+ -- Olof Johansson <olof@ethup.se>  Sun, 29 Mar 2015 12:36:30 +0200
+
 svtplay-dl (0.10.2015.01.28-1) experimental; urgency=medium
 
   * Imported Upstream version 0.10.2015.01.28
