@@ -19,21 +19,38 @@ to do itself.
 
 =head2 OPTIONS
 
+=head3 --version
+
+Show the program's version number and exit.
+
+=head3 --help  -h
+
+Show description of options.
+
 =head3 --output=filename  -o filename
 
 Outputs to the given filename.
+
+=head3 --force  -f
+
+Overwrite the output file if it exists already.
 
 =head3 --resume  -r
 
 Resume a download.
 
-=head3 --live  -v
+=head3 --live  -l
 
 Enable support for live streams. (rtmp based ones)
 
 =head3 --silent  -s
 
 Be less verbose.
+
+=head3 --verbose  -v
+
+Explain what is going on, including HTTP requests and other useful
+debugging data.
 
 =head3 --quality=quality  -q quality
 
@@ -43,6 +60,10 @@ by default.
 =head3 --flexible-quality=amount  -Q amount
 
 Allow given quality (as above) to differ by an amount.
+
+=head3 --list-quality
+
+List the available qualities for a video.
 
 =head3 --hls  -H
 
@@ -72,17 +93,22 @@ Download thumbnail from the site if available.
 
 Try to download all episodes.
 
+=head3 --all-last=NN
+
+Get last NN episodes instead of all episodes, when used with
+--all-episodes.
+
 =head3 -P preferred, --preferred=preferred
 
 Preferred download method.
 
-=head3 --version
+=head3 --exclude=WORD1,WORD2,...
 
-Show the program's version number and exit.
+Exclude videos with the WORD(s) in the filename. Comma separated.
 
-=head3 --help  -h
+=head3 --get-url -g
 
-Show description of options.
+Do not download any video, but instead print the URL.
 
 =head1 SUPPORTED SERVICES
 
@@ -93,8 +119,6 @@ Show description of options.
 =item * Bambuser: L<http://bambuser.com/>
 
 =item * HBO: L<http://hbo.com/>
-
-=item * Justin.tv: L<http://justin.tv/>
 
 =item * Twitch: L<http://twitch.tv/>
 
@@ -118,8 +142,6 @@ Show description of options.
 
 =item * Expressen: L<http://expressen.se/>
 
-=item * Kanal5: L<http://kanal5.se/>
-
 =item * Kanal5 Play: L<http://kanal5play.se/>
 
 =item * Kanal9 Play: L<http://kanal9play.se/>
@@ -131,8 +153,6 @@ Show description of options.
 =item * Sveriges Radio: L<http://sverigesradio.se/>
 
 =item * SVT Play: L<http://svtplay.se/>
-
-=item * Sydsvenskan: L<http://sydsvenskan.se/>
 
 =item * TV10 Play: L<http://tv10play.se/>
 

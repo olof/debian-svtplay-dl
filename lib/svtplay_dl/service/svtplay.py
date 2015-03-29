@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 import copy
 from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.utils import get_http_data, filenamify
-from svtplay_dl.utils.urllib import urlparse
+from svtplay_dl.utils.urllib import urlparse, urljoin
 from svtplay_dl.fetcher.hds import hdsparse
 from svtplay_dl.fetcher.hls import HLS, hlsparse
 from svtplay_dl.fetcher.rtmp import RTMP
@@ -79,8 +79,9 @@ class Svtplay(Service, OpenGraphThumbMixin):
 
             if parse.path.find("m3u8") > 0:
                 streams = hlsparse(i["url"])
-                for n in list(streams.keys()):
-                    yield HLS(copy.copy(options), streams[n], n)
+                if streams:
+                    for n in list(streams.keys()):
+                        yield HLS(copy.copy(options), streams[n], n)
             elif parse.path.find("f4m") > 0:
                 match = re.search(r"\/se\/secure\/", i["url"])
                 if not match:
@@ -102,15 +103,19 @@ class Svtplay(Service, OpenGraphThumbMixin):
         match = re.search(r'<link rel="alternate" type="application/rss\+xml" [^>]*href="([^"]+)"',
                           self.get_urldata()[1])
         if match is None:
-            log.error("Couldn't retrieve episode list")
-            return
-        error, data = get_http_data(match.group(1))
-        if error:
-            log.error("Cant get rss page")
-            return
-        xml = ET.XML(data)
+            match = re.findall(r'a class="play[^"]+"\s+href="(/video[^"]+)"', self.get_urldata()[1])
+            if not match:
+                log.error("Couldn't retrieve episode list")
+                return
+            episodes = [urljoin("http://www.svtplay.se", x) for x in match]
+        else:
+            error, data = get_http_data(match.group(1))
+            if error:
+                log.error("Cant get rss page")
+                return
+            xml = ET.XML(data)
 
-        episodes = [x.text for x in xml.findall(".//item/link")]
+            episodes = [x.text for x in xml.findall(".//item/link")]
         episodes_new = []
         n = 1
         for i in episodes:
