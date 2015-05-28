@@ -2,20 +2,19 @@
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
 import sys
-import re
 import os
 import logging
 import copy
-import platform
 from optparse import OptionParser
 
 from svtplay_dl.error import UIException
 from svtplay_dl.log import log
-from svtplay_dl.utils import decode_html_entities, filenamify, select_quality, list_quality
+from svtplay_dl.utils import select_quality, list_quality
 from svtplay_dl.utils.urllib import URLError
 from svtplay_dl.service import service_handler, Generic
 from svtplay_dl.fetcher import VideoRetriever
 from svtplay_dl.subtitle import subtitle
+from svtplay_dl.output import filename
 
 from svtplay_dl.service.aftonbladet import Aftonbladet
 from svtplay_dl.service.bambuser import Bambuser
@@ -24,6 +23,7 @@ from svtplay_dl.service.dbtv import Dbtv
 from svtplay_dl.service.disney import Disney
 from svtplay_dl.service.dr import Dr
 from svtplay_dl.service.expressen import Expressen
+from svtplay_dl.service.facebook import Facebook
 from svtplay_dl.service.hbo import Hbo
 from svtplay_dl.service.justin import Justin
 from svtplay_dl.service.kanal5 import Kanal5
@@ -46,7 +46,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "0.10.2015.03.25"
+__version__ = "0.10.2015.05.24"
 
 sites = [
     Aftonbladet,
@@ -56,6 +56,7 @@ sites = [
     Disney,
     Dr,
     Expressen,
+    Facebook,
     Hbo,
     Justin,
     Lemonwhale,
@@ -176,27 +177,9 @@ def get_media(url, options):
             sys.exit(2)
 
 def get_one_media(stream, options):
-    if not options.output or os.path.isdir(options.output):
-        error, data = stream.get_urldata()
-        if error:
-            log.error("Cant find that page")
-            return
-        if data is None:
-            return
-        match = re.search(r"(?i)<title[^>]*>\s*(.*?)\s*</title>", data, re.S)
-        if match:
-            options.output_auto = True
-            title_tag = decode_html_entities(match.group(1))
-            if not options.output:
-                options.output = filenamify(title_tag)
-            else:
-                # output is a directory
-                options.output = os.path.join(options.output, filenamify(title_tag))
-
-    if platform.system() == "Windows":
-        # ugly hack. replace \ with / or add extra \ because c:\test\kalle.flv will add c:_tab_est\kalle.flv
-        if options.output and options.output.find("\\") > 0:
-            options.output = options.output.replace("\\", "/")
+    # Make an automagic filename
+    if not filename(options, stream):
+        return
 
     videos = []
     subs = []
