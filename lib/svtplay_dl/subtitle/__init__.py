@@ -105,18 +105,29 @@ class subtitle(object):
     def smi(self, subdata):
         if is_py3:
             subdata = subdata.decode("latin1")
-        recomp = re.compile(r'<SYNC Start=(\d+)>\s+<P Class=\w+>(.*)\s+<SYNC Start=(\d+)>\s+<P Class=\w+>', re.M|re.I|re.U)
+        ssubdata = StringIO(subdata)
+        timea = 0
         number = 1
+        data = None
         subs = ""
         TAG_RE = re.compile(r'<[^>]+>')
         bad_char = re.compile(r'\x96')
-        for i in recomp.finditer(subdata):
-            subs += "%s\n%s --> %s\n" % (number, timestr(i.group(1)), timestr(i.group(3)))
-            text = "%s\n\n" % TAG_RE.sub('', i.group(2).replace("<br>", "\n"))
-            if text[0] == "\x0a":
-                text = text[1:]
-            subs += text
-            number += 1
+        for i in ssubdata.readlines():
+            i = i.rstrip()
+            sync = re.search(r"<SYNC Start=(\d+)>", i)
+            if sync:
+                if int(sync.group(1)) != int(timea):
+                    if data and data != "&nbsp;":
+                        subs += "%s\n%s --> %s\n" % (number, timestr(timea), timestr(sync.group(1)))
+                        text = "%s\n" % TAG_RE.sub('', data.replace("<br>", "\n"))
+                        if text[len(text)-2] != "\n":
+                            text += "\n"
+                        subs += text
+                        number += 1
+                timea = sync.group(1)
+            text = re.search("<P Class=SVCC>(.*)", i)
+            if text:
+                data = text.group(1)
         recomp = re.compile(r'\r')
         text = bad_char.sub('-', recomp.sub('', subs)).replace('&quot;', '"')
         if is_py3:
@@ -124,8 +135,6 @@ class subtitle(object):
         return text
 
     def wrst(self, subdata):
-        if is_py3:
-            subdata = subdata.encode("utf-8")
         ssubdata = StringIO(subdata)
         srt = ""
         subtract = False
@@ -134,10 +143,9 @@ class subtitle(object):
         block = 0
         subnr = False
         for i in ssubdata.readlines():
-            i = i.decode("utf8")
-            match = re.search("^[\r\n]+", i)
-            match2 = re.search("([\d:\.]+ --> [\d:\.]+)", i)
-            match3 = re.search("^(\d+)\s", i)
+            match = re.search(r"^[\r\n]+", i)
+            match2 = re.search(r"([\d:\.]+ --> [\d:\.]+)", i)
+            match3 = re.search(r"^(\d+)\s", i)
             if i[:6] == "WEBVTT":
                 pass
             elif match and number_b > 1:
@@ -169,7 +177,9 @@ class subtitle(object):
                 sub = re.sub('<[^>]*>', '', i)
                 srt += sub.lstrip()
 
-        return srt.encode("utf8")
+        if is_py3:
+            return srt.encode("utf-8")
+        return srt
 
 def timestr(msec):
     """
