@@ -1,3 +1,13 @@
+svtplay-dl (0.10.2015.05.24-1) unstable; urgency=medium
+
+  * Imported Upstream version 0.10.2015.05.24
+   - Move back to unstable, now that Jessie is released.
+  * build: make manpage generation reproducible
+   - Despite claims in previous changelog entry, this was not
+     completely fixed. It should be now.
+
+ -- Olof Johansson <olof@ethup.se>  Thu, 28 May 2015 18:33:13 +0200
+
 svtplay-dl (0.10.2015.03.25-1) experimental; urgency=medium
 
   * Imported Upstream version 0.10.2015.03.25 (Closes: #780426)
