@@ -58,6 +58,7 @@ This script works for:
 * di.se
 * dn.se
 * dr.dk
+* efn.se
 * expressen.se
 * hbo.com
 * kanal5play.se
@@ -88,3 +89,8 @@ This script works for:
 * vg.no
 * viagame.com
 * viasat4play.no
+
+## License
+
+This project is licensed under [The MIT License (MIT)](LICENSE).
+

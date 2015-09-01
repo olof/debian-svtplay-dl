@@ -41,9 +41,15 @@ class Svtplay(Service, OpenGraphThumbMixin):
 
         pos = url.find("?")
         if pos < 0:
-            dataurl = "%s?&output=json&format=json" % url
+            if "svt.se" in url:
+                dataurl = "%s?format=json" % url
+            else:
+                dataurl = "%s?output=json" % url
         else:
-            dataurl = "%s&output=json&format=json" % url
+            if "svt.se" in url:
+                dataurl = "%s&format=json" % url
+            else:
+                dataurl = "%s&output=json" % url
         error, data = get_http_data(dataurl)
         if error:
             log.error("Can't get api page. this is a bug.")
@@ -143,7 +149,7 @@ def outputfilename(data, filename, raw):
         title = "%s.%s-%s-svtplay" % (name, other, data["videoId"])
     title = filenamify(title)
     if len(directory):
-        output = "%s/%s" % (directory, title)
+        output = os.path.join(directory, title)
     else:
         output = title
     return output
