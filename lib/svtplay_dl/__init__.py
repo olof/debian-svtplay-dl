@@ -22,10 +22,11 @@ from svtplay_dl.service.bigbrother import Bigbrother
 from svtplay_dl.service.dbtv import Dbtv
 from svtplay_dl.service.disney import Disney
 from svtplay_dl.service.dr import Dr
+from svtplay_dl.service.efn import Efn
 from svtplay_dl.service.expressen import Expressen
 from svtplay_dl.service.facebook import Facebook
 from svtplay_dl.service.hbo import Hbo
-from svtplay_dl.service.justin import Justin
+from svtplay_dl.service.twitch import Twitch
 from svtplay_dl.service.kanal5 import Kanal5
 from svtplay_dl.service.lemonwhale import Lemonwhale
 from svtplay_dl.service.mtvnn import Mtvnn
@@ -46,7 +47,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "0.10.2015.05.24"
+__version__ = "0.10.2015.08.24"
 
 sites = [
     Aftonbladet,
@@ -55,10 +56,11 @@ sites = [
     Dbtv,
     Disney,
     Dr,
+    Efn,
     Expressen,
     Facebook,
     Hbo,
-    Justin,
+    Twitch,
     Lemonwhale,
     Kanal5,
     Mtvservices,
