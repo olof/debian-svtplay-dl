@@ -1,3 +1,10 @@
+svtplay-dl (0.20.2015.09.13-1) unstable; urgency=medium
+
+  * Imported Upstream version 0.20.2015.09.13
+   - This release adds a dependency on the python-requests package.
+
+ -- Olof Johansson <olof@ethup.se>  Sun, 13 Sep 2015 23:57:16 +0200
+
 svtplay-dl (0.10.2015.08.24-1) unstable; urgency=medium
 
   * Imported Upstream version 0.10.2015.08.24
