@@ -6,40 +6,36 @@ import copy
 import json
 
 from svtplay_dl.service import Service
-from svtplay_dl.log import log
-from svtplay_dl.utils import get_http_data
 from svtplay_dl.fetcher.hls import HLS, hlsparse
 from svtplay_dl.fetcher.http import HTTP
+from svtplay_dl.error import ServiceError
 
 class Ruv(Service):
     supported_domains = ['ruv.is']
 
     def get(self, options):
-        error, data = self.get_urldata()
-        if error:
-            log.error("Can't get the page")
-            return
+        data = self.get_urldata()
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         match = re.search(r'"([^"]+geo.php)"', data)
         if match:
-            error, data = get_http_data(match.group(1))
-            if error:
-                log.error("Cant get stream info")
-                return
+            data = self.http.request("get", match.group(1)).content
             match = re.search(r'punktur=\(([^ ]+)\)', data)
             if match:
                 janson = json.loads(match.group(1))
                 options.live = checklive(janson["result"][1])
-                streams = hlsparse(janson["result"][1])
+                streams = hlsparse(janson["result"][1], self.http.request("get", janson["result"][1]).text)
                 for n in list(streams.keys()):
                     yield HLS(copy.copy(options), streams[n], n)
+            else:
+                yield ServiceError("Can't find json info")
         else:
-            match = re.search(r'<source [^ ]*[ ]*src="([^"]+)" ', self.get_urldata()[1])
+            match = re.search(r'<source [^ ]*[ ]*src="([^"]+)" ', self.get_urldata())
             if not match:
-                log.error("Can't find video info for: %s", self.url)
+                yield ServiceError("Can't find video info for: %s", self.url)
                 return
             if match.group(1).endswith("mp4"):
                 yield HTTP(copy.copy(options), match.group(1), 800)

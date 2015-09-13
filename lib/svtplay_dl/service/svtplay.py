@@ -2,19 +2,19 @@
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
 import re
-import json
 import os
 import xml.etree.ElementTree as ET
 import copy
+from  svtplay_dl.log import log
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import get_http_data, filenamify
+from svtplay_dl.utils import filenamify, ensure_unicode
 from svtplay_dl.utils.urllib import urlparse, urljoin
 from svtplay_dl.fetcher.hds import hdsparse
 from svtplay_dl.fetcher.hls import HLS, hlsparse
 from svtplay_dl.fetcher.rtmp import RTMP
 from svtplay_dl.fetcher.http import HTTP
 from svtplay_dl.subtitle import subtitle
-from svtplay_dl.log import log
+from svtplay_dl.error import ServiceError
 
 class Svtplay(Service, OpenGraphThumbMixin):
     supported_domains = ['svtplay.se', 'svt.se', 'beta.svtplay.se', 'svtflow.se']
@@ -25,16 +25,13 @@ class Svtplay(Service, OpenGraphThumbMixin):
 
     def get(self, options):
         if re.findall("svt.se", self.url):
-            error, data = self.get_urldata()
-            if error:
-                log.error("Can't get the page")
-                return
+            data = self.get_urldata()
             match = re.search(r"data-json-href=\"(.*)\"", data)
             if match:
                 filename = match.group(1).replace("&amp;", "&").replace("&format=json", "")
                 url = "http://www.svt.se%s" % filename
             else:
-                log.error("Can't find video file for: %s", self.url)
+                yield ServiceError("Can't find video file for: %s" % self.url)
                 return
         else:
             url = self.url
@@ -50,23 +47,20 @@ class Svtplay(Service, OpenGraphThumbMixin):
                 dataurl = "%s&format=json" % url
             else:
                 dataurl = "%s&output=json" % url
-        error, data = get_http_data(dataurl)
-        if error:
-            log.error("Can't get api page. this is a bug.")
+        data = self.http.request("get", dataurl)
+        if data.status_code == 404:
+            yield ServiceError("Can't get the json file for %s" % self.json)
             return
-        try:
-            data = json.loads(data)
-        except ValueError:
-            log.error("Can't parse json data from the site")
-            return
+        data = data.json()
         if "live" in data["video"]:
             options.live = data["video"]["live"]
 
         if options.output_auto:
             options.service = "svtplay"
-            options.output = outputfilename(data, options.output, self.get_urldata()[1])
+            options.output = outputfilename(data, options.output, ensure_unicode(self.get_urldata()))
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         if data["video"]["subtitleReferences"]:
@@ -84,20 +78,21 @@ class Svtplay(Service, OpenGraphThumbMixin):
             parse = urlparse(i["url"])
 
             if parse.path.find("m3u8") > 0:
-                streams = hlsparse(i["url"])
+                streams = hlsparse(i["url"], self.http.request("get", i["url"]).text)
                 if streams:
                     for n in list(streams.keys()):
                         yield HLS(copy.copy(options), streams[n], n)
             elif parse.path.find("f4m") > 0:
                 match = re.search(r"\/se\/secure\/", i["url"])
                 if not match:
-                    streams = hdsparse(copy.copy(options), i["url"])
+                    res = self.http.request("get", i["url"], params={"hdcore": "3.7.0"})
+                    streams = hdsparse(copy.copy(options), res.text, i["url"])
                     if streams:
                         for n in list(streams.keys()):
                             yield streams[n]
             elif parse.scheme == "rtmp":
                 embedurl = "%s?type=embed" % url
-                error, data = get_http_data(embedurl)
+                data = self.http.request("get", embedurl).text
                 match = re.search(r"value=\"(/(public)?(statiskt)?/swf(/video)?/svtplayer-[0-9\.a-f]+swf)\"", data)
                 swf = "http://www.svtplay.se%s" % match.group(1)
                 options.other = "-W %s" % swf
@@ -107,18 +102,15 @@ class Svtplay(Service, OpenGraphThumbMixin):
 
     def find_all_episodes(self, options):
         match = re.search(r'<link rel="alternate" type="application/rss\+xml" [^>]*href="([^"]+)"',
-                          self.get_urldata()[1])
+                          self.get_urldata())
         if match is None:
-            match = re.findall(r'a class="play[^"]+"\s+href="(/video[^"]+)"', self.get_urldata()[1])
+            match = re.findall(r'a class="play[^"]+"\s+href="(/video[^"]+)"', self.get_urldata())
             if not match:
                 log.error("Couldn't retrieve episode list")
                 return
             episodes = [urljoin("http://www.svtplay.se", x) for x in match]
         else:
-            error, data = get_http_data(match.group(1))
-            if error:
-                log.error("Cant get rss page")
-                return
+            data = self.http.request("get", match.group(1)).content
             xml = ET.XML(data)
 
             episodes = [x.text for x in xml.findall(".//item/link")]

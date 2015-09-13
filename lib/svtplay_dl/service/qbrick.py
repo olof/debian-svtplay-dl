@@ -6,48 +6,46 @@ import copy
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import get_http_data, is_py2_old
-from svtplay_dl.log import log
+from svtplay_dl.utils import is_py2_old
+from svtplay_dl.error import ServiceError
 from svtplay_dl.fetcher.rtmp import RTMP
 
 class Qbrick(Service, OpenGraphThumbMixin):
-    supported_domains = ['di.se']
+    supported_domains = ['di.seXX']
 
     def get(self, options):
-        error, data = self.get_urldata()
-        if error:
-            log.error("Can't get the page")
-            return
+        data = self.get_urldata()
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         if re.findall(r"di.se", self.url):
             match = re.search("src=\"(http://qstream.*)\"></iframe", data)
             if not match:
-                log.error("Can't find video info for: %s", self.url)
+                yield ServiceError("Can't find video info for: %s" % self.url)
                 return
-            error, data = get_http_data(match.group(1))
+            data = self.http.request("get", match.group(1)).content
             match = re.search(r"data-qbrick-ccid=\"([0-9A-Z]+)\"", data)
             if not match:
-                log.error("Can't find video file for: %s", self.url)
+                yield ServiceError("Can't find video file for: %s" % self.url)
                 return
             host = "http://vms.api.qbrick.com/rest/v3/getplayer/%s" % match.group(1)
         else:
-            log.error("Can't find any info for %s", self.url)
+            yield ServiceError("Can't find any info for %s" % self.url)
             return
 
-        error, data = get_http_data(host)
+        data = self.http.request("get", host).content
         xml = ET.XML(data)
         try:
             url = xml.find("media").find("item").find("playlist").find("stream").find("format").find("substream").text
         except AttributeError:
-            log.error("Can't find video file")
+            yield ServiceError("Can't find video file")
             return
         live = xml.find("media").find("item").find("playlist").find("stream").attrib["isLive"]
         if live == "true":
             options.live = True
-        error, data = get_http_data(url)
+        data = self.http.request("get", url).content
         xml = ET.XML(data)
         server = xml.find("head").find("meta").attrib["base"]
         streams = xml.find("body").find("switch")

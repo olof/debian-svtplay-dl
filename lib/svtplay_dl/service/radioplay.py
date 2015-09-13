@@ -10,18 +10,16 @@ import copy
 
 from svtplay_dl.service import Service
 from svtplay_dl.fetcher.http import HTTP
-from svtplay_dl.log import log
+from svtplay_dl.error import ServiceError
 
 class Radioplay(Service):
     supported_domains = ['radioplay.se']
 
     def get(self, options):
-        error, data = self.get_urldata()
-        if error:
-            log.error("Can't get the page")
-            return
+        data = self.get_urldata()
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         match = re.search(r"RP.vcdData = ({.*});</script>", data)
@@ -30,5 +28,5 @@ class Radioplay(Service):
             for i in list(data["station"]["streams"].keys()):
                 yield HTTP(copy.copy(options), data["station"]["streams"][i], i)
         else:
-            log.error("Can't find stream info")
+            yield ServiceError("Can't find stream info")
             return

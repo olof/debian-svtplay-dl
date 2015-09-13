@@ -6,8 +6,7 @@ import json
 import copy
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import get_http_data
-from svtplay_dl.log import log
+from svtplay_dl.error import ServiceError
 from svtplay_dl.fetcher.hds import hdsparse
 from svtplay_dl.fetcher.hls import hlsparse, HLS
 
@@ -15,57 +14,52 @@ class Bigbrother(Service, OpenGraphThumbMixin):
     supported_domains = ["bigbrother.se"]
 
     def get(self, options):
-        error, data = self.get_urldata()
-        if error:
-            log.error("Can't download page.")
-            return
+        data = self.get_urldata()
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         match = re.search(r'id="(bcPl[^"]+)"', data)
         if not match:
-            log.error("Can't find flash id.")
+            yield ServiceError("Can't find flash id.")
             return
         flashid = match.group(1)
 
-        match = re.search(r'playerID" value="([^"]+)"', self.get_urldata()[1])
+        match = re.search(r'playerID" value="([^"]+)"', self.get_urldata())
         if not match:
-            log.error("Can't find playerID")
+            yield ServiceError("Can't find playerID")
             return
         playerid = match.group(1)
 
-        match = re.search(r'playerKey" value="([^"]+)"', self.get_urldata()[1])
+        match = re.search(r'playerKey" value="([^"]+)"', self.get_urldata())
         if not match:
-            log.error("Can't find playerKey")
+            yield ServiceError("Can't find playerKey")
             return
         playerkey = match.group(1)
 
-        match = re.search(r'videoPlayer" value="([^"]+)"', self.get_urldata()[1])
+        match = re.search(r'videoPlayer" value="([^"]+)"', self.get_urldata())
         if not match:
-            log.error("Can't find videoPlayer info")
+            yield ServiceError("Can't find videoPlayer info")
             return
         videoplayer = match.group(1)
 
         dataurl = "http://c.brightcove.com/services/viewer/htmlFederated?flashID=%s&playerID=%s&playerKey=%s&isVid=true&isUI=true&dynamicStreaming=true&@videoPlayer=%s" % (flashid, playerid, playerkey, videoplayer)
-        error, data = get_http_data(dataurl)
-        if error:
-            log.error("Cant download video info")
-            return
+        data = self.http.request("get", dataurl).content
         match = re.search(r'experienceJSON = ({.*});', data)
         if not match:
-            log.error("Can't find json data")
+            yield ServiceError("Can't find json data")
             return
         jsondata = json.loads(match.group(1))
         renditions = jsondata["data"]["programmedContent"]["videoPlayer"]["mediaDTO"]["renditions"]
         for i in renditions:
             if i["defaultURL"].endswith("f4m"):
-                streams = hdsparse(copy.copy(options), i["defaultURL"])
+                streams = hdsparse(copy.copy(options), self.http.request("get", i["defaultURL"], params={"hdcore": "3.7.0"}).text, i["defaultURL"])
                 if streams:
                     for n in list(streams.keys()):
                         yield streams[n]
 
             if i["defaultURL"].endswith("m3u8"):
-                streams = hlsparse(i["defaultURL"])
+                streams = hlsparse(i["defaultURL"], self.http.request("get", i["defaultURL"]).text)
                 for n in list(streams.keys()):
                     yield HLS(copy.copy(options), streams[n], n)

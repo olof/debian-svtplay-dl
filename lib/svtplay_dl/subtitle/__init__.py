@@ -2,9 +2,10 @@ import xml.etree.ElementTree as ET
 import json
 import re
 from svtplay_dl.log import log
-from svtplay_dl.utils import is_py2, is_py3, get_http_data
+from svtplay_dl.utils import is_py2, decode_html_entities
 from svtplay_dl.utils.io import StringIO
 from svtplay_dl.output import output
+from requests import Session
 
 
 class subtitle(object):
@@ -13,12 +14,10 @@ class subtitle(object):
         self.subtitle = None
         self.options = options
         self.subtype = subtype
+        self.http = Session()
 
     def download(self):
-        error, subdata = get_http_data(self.url, cookiejar=self.options.cookies)
-        if error:
-            log.error("Can't download subtitle")
-            return
+        subdata = self.http.request("get", self.url, cookies=self.options.cookies).text
 
         data = None
         if self.subtype == "tt":
@@ -32,7 +31,7 @@ class subtitle(object):
         if self.subtype == "wrst":
             data = self.wrst(subdata)
 
-        file_d = output(self.options, "srt")
+        file_d = output(self.options, "srt", mode="wt")
         if hasattr(file_d, "read") is False:
             return
         file_d.write(data)
@@ -41,7 +40,7 @@ class subtitle(object):
     def tt(self, subdata):
         i = 1
         data = ""
-        tree = ET.ElementTree(ET.fromstring(subdata))
+        tree = ET.XML(subdata.encode("utf8"))
         xml = tree.find("{http://www.w3.org/2006/10/ttaf1}body").find("{http://www.w3.org/2006/10/ttaf1}div")
         plist = list(xml.findall("{http://www.w3.org/2006/10/ttaf1}p"))
         for node in plist:
@@ -63,8 +62,8 @@ class subtitle(object):
                 data = tt_text(node, data)
                 data += "\n"
                 i += 1
-
-        data = data.encode('utf8')
+        if is_py2:
+            data = data.encode("utf8")
         return data
 
     def json(self, subdata):
@@ -82,7 +81,7 @@ class subtitle(object):
         return subs
 
     def sami(self, subdata):
-        tree = ET.XML(subdata)
+        tree = ET.XML(subdata.encode("utf8"))
         subt = tree.find("Font")
         subs = ""
         n = 0
@@ -98,13 +97,11 @@ class subtitle(object):
                 if int(n) > 0:
                     subs += "%s\n" % i.text
 
-
-        subs = subs.encode('utf8')
+        if is_py2:
+            subs = subs.encode('utf8')
         return subs
 
     def smi(self, subdata):
-        if is_py3:
-            subdata = subdata.decode("latin1")
         ssubdata = StringIO(subdata)
         timea = 0
         number = 1
@@ -130,7 +127,7 @@ class subtitle(object):
                 data = text.group(1)
         recomp = re.compile(r'\r')
         text = bad_char.sub('-', recomp.sub('', subs)).replace('&quot;', '"')
-        if is_py3:
+        if is_py2:
             return text.encode("utf-8")
         return text
 
@@ -176,8 +173,8 @@ class subtitle(object):
             else:
                 sub = re.sub('<[^>]*>', '', i)
                 srt += sub.lstrip()
-
-        if is_py3:
+        srt = decode_html_entities(srt)
+        if is_py2:
             return srt.encode("utf-8")
         return srt
 

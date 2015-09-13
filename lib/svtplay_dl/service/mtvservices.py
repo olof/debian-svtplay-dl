@@ -6,28 +6,22 @@ import copy
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, is_py2_old
+from svtplay_dl.utils import is_py2_old
 from svtplay_dl.fetcher.http import HTTP
-
-from svtplay_dl.log import log
+from svtplay_dl.error import ServiceError
 
 class Mtvservices(Service):
     supported_domains = ['colbertnation.com', 'thedailyshow.com']
 
     def get(self, options):
-        error, data = self.get_urldata()
-        if error:
-            log.error("Cant get page")
-            return
+        data = self.get_urldata()
+
         match = re.search(r"mgid=\"(mgid.*[0-9]+)\" data-wi", data)
         if not match:
-            log.error("Can't find video file")
+            yield ServiceError("Can't find video file")
             return
         url = "http://media.mtvnservices.com/player/html5/mediagen/?uri=%s" % match.group(1)
-        error, data = get_http_data(url)
-        if error:
-            log.error("Cant get stream info")
-            return
+        data = self.http.request("get", url)
         start = data.index("<?xml version=")
         data = data[start:]
         xml = ET.XML(data)
@@ -38,6 +32,7 @@ class Mtvservices(Service):
             sa = list(ss.iter("rendition"))
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         for i in sa:

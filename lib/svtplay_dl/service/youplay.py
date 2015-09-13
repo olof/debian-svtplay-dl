@@ -6,40 +6,34 @@ import json
 import copy
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import get_http_data
 from svtplay_dl.utils.urllib import unquote_plus
 from svtplay_dl.fetcher.http import HTTP
-from svtplay_dl.log import log
+from svtplay_dl.error import ServiceError
 
 class Youplay(Service, OpenGraphThumbMixin):
     supported_domains = ['www.affarsvarlden.se']
 
     def get(self, options):
-        error, data = self.get_urldata()
-        if error:
-            log.error("Can't get the page.")
-            return
+        data = self.get_urldata()
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         match = re.search(r'script async defer src="(//content.youplay.se[^"]+)"', data)
         if not match:
-            log.error("Cant find video info")
+            yield ServiceError("Cant find video info for %s" % self.url)
             return
 
-        error, data = get_http_data("http:%s" % match.group(1))
-        if error:
-            log.error("Cant get video info")
-            return
+        data = self.http.request("get", "http:%s" % match.group(1)).content
         match = re.search(r'decodeURIComponent\("([^"]+)"\)\)', data)
         if not match:
-            log.error("Can't decode video info")
+            yield ServiceError("Can't decode video info")
             return
         data = unquote_plus(match.group(1))
         match = re.search(r"videoData = ({[^;]+});", data)
         if not match:
-            log.error("Cant find vidoe info")
+            yield ServiceError("Cant find video info for %s" % self.url)
             return
         # fix broken json.
         regex = re.compile(r"\s(\w+):")
