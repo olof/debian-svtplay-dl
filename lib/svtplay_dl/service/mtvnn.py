@@ -4,7 +4,8 @@ import os
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import get_http_data, is_py2_old, check_redirect, urlparse
+from svtplay_dl.utils import is_py2_old
+from svtplay_dl.error import ServiceError
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import RTMP
 
@@ -13,19 +14,13 @@ class Mtvnn(Service, OpenGraphThumbMixin):
     supported_domains = ['nickelodeon.se', "nickelodeon.nl", "nickelodeon.no"]
 
     def get(self, options):
-        error, data = self.get_urldata()
-        if error:
-            log.error("Can't get the page")
-            return
+        data = self.get_urldata()
         match = re.search(r'"(http://api.mtvnn.com/v2/mrss.xml[^"]+)"', data)
         if not match:
-            log.error("Can't find id for the video")
+            yield ServiceError("Can't find id for the video")
             return
 
-        error, data = get_http_data(match.group(1))
-        if error:
-            log.error("Cant get video info")
-            return
+        data = self.http.request("get", match.group(1)).content
         xml = ET.XML(data)
         mediagen = xml.find("channel").find("item").find("{http://search.yahoo.com/mrss/}group")
         title = xml.find("channel").find("item").find("title").text
@@ -37,17 +32,14 @@ class Mtvnn(Service, OpenGraphThumbMixin):
                 options.output = title
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         swfurl = mediagen.find("{http://search.yahoo.com/mrss/}player").attrib["url"]
-        parse = urlparse(swfurl)
-        options.other = "-W %s://%s%s" % (parse.scheme, parse.hostname, check_redirect(swfurl))
+        options.other = "-W %s" % self.http.check_redirect(swfurl)
 
         contenturl = mediagen.find("{http://search.yahoo.com/mrss/}content").attrib["url"]
-        error, content = get_http_data(contenturl)
-        if error:
-            log.error("Cant download stream info")
-            return
+        content = self.http.request("get", contenturl).content
         xml = ET.XML(content)
         ss = xml.find("video").find("item")
         if is_py2_old:
@@ -59,12 +51,12 @@ class Mtvnn(Service, OpenGraphThumbMixin):
             yield RTMP(options, i.find("src").text, i.attrib["bitrate"])
 
     def find_all_episodes(self, options):
-        match = re.search(r"data-franchise='([^']+)'", self.get_urldata()[1])
+        match = re.search(r"data-franchise='([^']+)'", self.get_urldata())
         if match is None:
             log.error("Couldn't program id")
             return
         programid = match.group(1)
-        match = re.findall(r"<li class='(divider playlist-item|playlist-item)'( data-item-id='([^']+)')?", self.get_urldata()[1])
+        match = re.findall(r"<li class='(divider playlist-item|playlist-item)'( data-item-id='([^']+)')?", self.get_urldata())
         if not match:
             log.error("Couldn't retrieve episode list")
             return

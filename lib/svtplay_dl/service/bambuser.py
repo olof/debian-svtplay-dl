@@ -6,8 +6,7 @@ import json
 import copy
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import get_http_data
-from svtplay_dl.log import log
+from svtplay_dl.error import ServiceError
 from svtplay_dl.fetcher.rtmp import RTMP
 from svtplay_dl.fetcher.http import HTTP
 
@@ -17,17 +16,15 @@ class Bambuser(Service, OpenGraphThumbMixin):
     def get(self, options):
         match = re.search(r"v/(\d+)", self.url)
         if not match:
-            log.error("Can't find video id in url")
+            yield ServiceError("Can't find video id in url")
             return
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         json_url = "http://player-c.api.bambuser.com/getVideo.json?api_key=005f64509e19a868399060af746a00aa&vid=%s" % match.group(1)
-        error, data = get_http_data(json_url)
-        if error:
-            log.error("Can't download video info")
-            return
+        data = self.http.request("get", json_url).content
 
         info = json.loads(data)["result"]
         video = info["url"]

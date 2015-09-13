@@ -11,9 +11,10 @@ import copy
 
 from svtplay_dl.utils.urllib import urlparse, quote_plus
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, filenamify
+from svtplay_dl.utils import filenamify
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.hls import HLS, hlsparse
+from svtplay_dl.error import ServiceError
 
 
 class TwitchException(Exception):
@@ -47,6 +48,7 @@ class Twitch(Service):
         urlp = urlparse(self.url)
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         match = re.match(r'/(\w+)/([bcv])/(\d+)', urlp.path)
@@ -69,7 +71,11 @@ class Twitch(Service):
         access = self._get_access_token(videoid)
 
         if options.output_auto:
-            info = json.loads(get_http_data("https://api.twitch.tv/kraken/videos/v%s" % videoid)[1])
+            data = self.http.request("get", "https://api.twitch.tv/kraken/videos/v%s" % videoid)
+            if data.status_code == 404:
+                yield ServiceError("Can't find the video")
+                return
+            info = json.loads(data.text)
             options.output = "twitch-%s-%s" % (info["channel"]["name"], filenamify(info["title"]))
 
         if "token" not in access:
@@ -80,7 +86,7 @@ class Twitch(Service):
         url = "http://usher.twitch.tv/vod/%s?nauth=%s&nauthsig=%s" % (
             videoid, nauth, authsig)
 
-        streams = hlsparse(url)
+        streams = hlsparse(url, self.http.request("get", url).text)
         if streams:
             for n in list(streams.keys()):
                 yield HLS(copy.copy(options), streams[n], n)
@@ -120,10 +126,10 @@ class Twitch(Service):
         # There are references to a api_token in global.js; it's used
         # with the "Twitch-Api-Token" HTTP header. But it doesn't seem
         # to be necessary.
-        error, payload = get_http_data(url, header={
+        payload = self.http.request("get", url, headers={
             'Accept': 'application/vnd.twitchtv.v2+json'
         })
-        return json.loads(payload)
+        return json.loads(payload.text)
 
     def _get_hls_url(self, channel):
         access = self._get_access_token(channel, "channels")
@@ -147,7 +153,10 @@ class Twitch(Service):
         options.live = True
         if not options.output:
             options.output = channel
-
-        streams = hlsparse(hls_url)
+        data = self.http.request("get", hls_url)
+        if data.status_code == 404:
+            yield ServiceError("Stream is not online.")
+            return
+        streams = hlsparse(hls_url, data.text)
         for n in list(streams.keys()):
             yield HLS(copy.copy(options), streams[n], n)

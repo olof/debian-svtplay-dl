@@ -6,60 +6,48 @@ import json
 import copy
 import os
 
-from svtplay_dl.utils.urllib import CookieJar, Cookie
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, filenamify
+from svtplay_dl.utils import filenamify
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import RTMP
 from svtplay_dl.fetcher.hls import HLS, hlsparse
 from svtplay_dl.subtitle import subtitle
+from svtplay_dl.error import ServiceError
 
 class Kanal5(Service):
     supported_domains = ['kanal5play.se', 'kanal9play.se', 'kanal11play.se']
 
     def __init__(self, url):
         Service.__init__(self, url)
-        self.cj = CookieJar()
+        self.cookies = {}
         self.subtitle = None
 
     def get(self, options):
         match = re.search(r".*video/([0-9]+)", self.url)
         if not match:
-            log.error("Can't find video file")
+            yield ServiceError("Can't find video file")
             return
 
         video_id = match.group(1)
         if options.username and options.password:
             # get session cookie
-            error, data = get_http_data("http://www.kanal5play.se/", cookiejar=self.cj)
+            data = self.http.request("get", "http://www.kanal5play.se/", cookies=self.cookies)
             authurl = "https://kanal5swe.appspot.com/api/user/login?callback=jQuery171029989&email=%s&password=%s&_=136250" % \
                       (options.username, options.password)
-            error, data = get_http_data(authurl)
+            data = self.http.request("get", authurl, cookies=data.cookies).text
             match = re.search(r"({.*})\);", data)
             jsondata = json.loads(match.group(1))
             if jsondata["success"] is False:
-                log.error(jsondata["message"])
+                yield ServiceError(jsondata["message"])
                 return
             authToken = jsondata["userData"]["auth"]
-            cc = Cookie(version=0, name='authToken',
-                        value=authToken,
-                        port=None, port_specified=False,
-                        domain='www.kanal5play.se',
-                        domain_specified=True,
-                        domain_initial_dot=True, path='/',
-                        path_specified=True, secure=False,
-                        expires=None, discard=True, comment=None,
-                        comment_url=None, rest={'HttpOnly': None})
-            self.cj.set_cookie(cc)
-            options.cookies = self.cj
+            self.cookies = {"authToken": authToken}
+            options.cookies = self.cookies
 
         url = "http://www.kanal5play.se/api/getVideo?format=FLASH&videoId=%s" % video_id
-        error, data = get_http_data(url, cookiejar=self.cj)
-        if error:
-            log.error("Can't download video info")
-            return
+        data = self.http.request("get", url, cookies=self.cookies).text
         data = json.loads(data)
-        options.cookiejar = self.cj
+        options.cookies = self.cookies
         if not options.live:
             options.live = data["isLive"]
 
@@ -75,6 +63,7 @@ class Kanal5(Service):
                 options.output = title
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         if data["hasSubtitle"]:
@@ -83,10 +72,11 @@ class Kanal5(Service):
         if options.force_subtitle:
             return
 
+        show = True
         if "streams" in data.keys():
             for i in data["streams"]:
                 if i["drmProtected"]:
-                    log.error("We cant download drm files for this site.")
+                    yield ServiceError("We cant download drm files for this site.")
                     return
                 steambaseurl = data["streamBaseUrl"]
                 bitrate = i["bitrate"]
@@ -98,15 +88,47 @@ class Kanal5(Service):
                 yield RTMP(options2, steambaseurl, bitrate)
 
             url = "http://www.kanal5play.se/api/getVideo?format=IPAD&videoId=%s" % video_id
-            error, data = get_http_data(url, cookiejar=self.cj)
-            if error:
-                log.error("Cant get video info")
-                return
-            data = json.loads(data)
+            data = self.http.request("get", url, cookies=self.cookies)
+            data = json.loads(data.text)
+            if "reasonsForNoStreams" in data:
+                show = False
             if "streams" in data.keys():
                 for i in data["streams"]:
-                    streams = hlsparse(i["source"])
+                    streams = hlsparse(i["source"], self.http.request("get", i["source"]).text)
                     for n in list(streams.keys()):
                         yield HLS(copy.copy(options), streams[n], n)
-        if "reasonsForNoStreams" in data:
-            log.error(data["reasonsForNoStreams"][0])
+        if "reasonsForNoStreams" in data and show:
+            yield ServiceError(data["reasonsForNoStreams"][0])
+
+    def find_all_episodes(self, options):
+        program = re.search(".*/program/(\d+)", self.url)
+        if not program:
+            log.error("Can't find program id in url")
+            return None
+        baseurl = "http://www.kanal5play.se/content/program/%s" % program.group(1)
+        data = self.http.request("get", baseurl).text
+        sasong = re.search("/program/\d+/sasong/(\d+)", data)
+        if not sasong:
+            log.error("Can't find seasong id")
+            return None
+        seasong = int(sasong.group(1))
+        episodes = []
+        n = 0
+        more = True
+        while more:
+            url = "%s/sasong/%s" % (baseurl, seasong)
+            data = self.http.request("get", url)
+            if data.status_code == 404:
+                more = False
+            else:
+                regex = re.compile(r'href="(/play/program/\d+/video/\d+)"')
+                for match in regex.finditer(data.text):
+                    if n == options.all_last:
+                        break
+                    url2 = "http://www.kanal5play.se%s" % match.group(1)
+                    if url2 not in episodes:
+                        episodes.append(url2)
+                    n += 1
+                seasong -= 1
+
+        return episodes

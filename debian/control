@@ -10,7 +10,8 @@ Vcs-Git: git://github.com/olof/debian-svtplay-dl.git
 Vcs-Browser: https://github.com/olof/debian-svtplay-dl
 
 Package: svtplay-dl
-Depends: rtmpdump (>= 2.4), python, python-crypto, ${misc:Depends}
+Depends: rtmpdump (>= 2.4), python, python-crypto, python-requests,
+         ${misc:Depends}
 Architecture: all
 Description: program to download videos from video on demand sites
  svtplay-dl is a command line application for downloading videos

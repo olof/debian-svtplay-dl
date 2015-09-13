@@ -2,10 +2,8 @@
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
 import sys
-import socket
 import logging
 import re
-import time
 import unicodedata
 
 try:
@@ -21,91 +19,26 @@ is_py2_old = (sys.version_info < (2, 7))
 # Used for UA spoofing in get_http_data()
 FIREFOX_UA = 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-GB; rv:1.9.0.3) Gecko/2008092417 Firefox/3.0.3'
 
-from svtplay_dl.utils.urllib import build_opener, Request, HTTPCookieProcessor, \
-                                    HTTPRedirectHandler, HTTPError, \
-                                    addinfourl, CookieJar, urlparse
-
 log = logging.getLogger('svtplay_dl')
 progress_stream = sys.stderr
 
-class NoRedirectHandler(HTTPRedirectHandler):
-    def __init__(self):
-        pass
+try:
+    from requests import Session
+except ImportError:
+    print("You need to install python-requests to use this script")
+    sys.exit(3)
 
-    def http_error_302(self, req, fp, code, msg, headers):
-        infourl = addinfourl(fp, headers, req.get_full_url())
-        infourl.status = code
-        infourl.code = code
-        return infourl
-    http_error_300 = http_error_302
-    http_error_301 = http_error_302
-    http_error_303 = http_error_302
-    http_error_307 = http_error_302
+class HTTP(Session):
+    def __init__(self, *args, **kwargs):
+        Session.__init__(self, *args, **kwargs)
 
-def get_http_data(url, header=None, post=None, useragent=FIREFOX_UA,
-                  referer=None, cookiejar=None):
-    """ Get the page to parse it for streams """
-    if not cookiejar:
-        cookiejar = CookieJar()
+    def check_redirect(self, url):
+        return self.get(url, stream=True).url
 
-    if url.find("manifest.f4m") > 0:
-        parse = urlparse(url)
-        url = "%s://%s%s?%s&hdcore=3.3.0" % (parse.scheme, parse.netloc, parse.path, parse.query)
-
-    log.debug("HTTP getting %r", url)
-    starttime = time.time()
-    error = None
-    if post:
-        if is_py3:
-            post = bytes(post, encoding="utf-8")
-        request = Request(url, data=post)
-    else:
-        request = Request(url)
-    standard_header = {'Referer': referer, 'User-Agent': useragent}
-    for key, value in [head for head in standard_header.items() if head[1]]:
-        request.add_header(key, value)
-    if header:
-        for key, value in [head for head in header.items() if head[1]]:
-            request.add_header(key, value)
-
-    opener = build_opener(HTTPCookieProcessor(cookiejar))
-
-    try:
-        response = opener.open(request)
-    except HTTPError as e:
-        error = True
-        data = e.read()
-        return error, data
-
-    if is_py3:
-        data = response.read()
-        try:
-            data = data.decode("utf-8")
-        except UnicodeDecodeError:
-            pass
-    else:
-        try:
-            data = response.read()
-        except socket.error as e:
-            return True, "Lost the connection to the server"
-    response.close()
-
-    spent_time = time.time() - starttime
-    bps = 8 * len(data) / max(spent_time, 0.001)
-
-    log.debug("HTTP got %d bytes from %r in %.2fs (= %dbps)",
-              len(data), url, spent_time, bps)
-
-    return error, data
-
-def check_redirect(url):
-    opener = build_opener(NoRedirectHandler())
-    opener.addheaders += [('User-Agent', FIREFOX_UA)]
-    response = opener.open(url)
-    if response.code in (300, 301, 302, 303, 307):
-        return response.headers["location"]
-    else:
-        return url
+    def request(self, method, url, *args, **kwargs):
+        log.debug("HTTP getting %r", url)
+        res = Session.request(self, method, url, **kwargs)
+        return res
 
 def sort_quality(data):
     data = sorted(data, key=lambda x: (x.bitrate, x.name()), reverse=True)
@@ -203,7 +136,7 @@ def filenamify(title):
     return title
 
 def download_thumbnail(options, url):
-    error, data = get_http_data(url)
+    data = Session.get(url).content
 
     filename = re.search(r"(.*)\.[a-z0-9]{2,3}$", options.output)
     tbn = "%s.tbn" % filename.group(1)

@@ -4,8 +4,8 @@ all: svtplay-dl
         release clean_releasedir $(RELEASE_DIR)
 
 # These variables describe the latest release:
-VERSION = 0.10
-LATEST_RELEASE_DATE = 2015.08.24
+VERSION = 0.20
+LATEST_RELEASE_DATE = 2015.09.13
 LATEST_RELEASE = $(VERSION).$(LATEST_RELEASE_DATE)
 
 # If we build a new release, this is what it will be called:
@@ -85,7 +85,7 @@ release: $(RELEASE_DIR) release-test
 	(cd $(RELEASE_DIR) && git format-patch --stdout HEAD^) | git am
 
 	git tag -m "New version $(NEW_RELEASE)" \
-		-m "$$(git log --oneline $(LATEST_RELEASE)..HEAD^)" \
+		-m "$$(git log --oneline $(git describe --abbrev=0)..HEAD^)" \
 		$(NEW_RELEASE)
 
 	make clean_releasedir

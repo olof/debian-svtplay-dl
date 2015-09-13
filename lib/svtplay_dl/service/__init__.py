@@ -3,7 +3,7 @@
 from __future__ import absolute_import
 import re
 from svtplay_dl.utils.urllib import urlparse
-from svtplay_dl.utils import download_thumbnail, get_http_data, is_py2
+from svtplay_dl.utils import download_thumbnail, is_py2, HTTP
 
 import logging
 
@@ -17,6 +17,7 @@ class Service(object):
         self._url = _url
         self._urldata = None
         self._error = False
+        self.http = HTTP()
 
     @property
     def url(self):
@@ -24,8 +25,8 @@ class Service(object):
 
     def get_urldata(self):
         if self._urldata is None:
-            self._error, self._urldata = get_http_data(self.url)
-        return self._error, self._urldata
+            self._urldata = self.http.request("get", self.url).text
+        return self._urldata
 
     @classmethod
     def handles(cls, url):
@@ -90,18 +91,16 @@ class OpenGraphThumbMixin(object):
     Mix this into the service class to grab thumbnail from OpenGraph properties.
     """
     def get_thumbnail(self, options):
-        url = opengraph_get(self.get_urldata()[1], "image")
+        url = opengraph_get(self.get_urldata(), "image")
         if url is None:
             return
         download_thumbnail(options, url)
 
 
-class Generic(object):
+class Generic(Service):
     ''' Videos embed in sites '''
-    def get(self, sites, url):
-        error, data = get_http_data(url)
-        if error:
-            return url, None
+    def get(self, sites):
+        data = self.http.request("get", self.url).text
         match = re.search(r"src=(\"|\')(http://www.svt.se/wd[^\'\"]+)(\"|\')", data)
         stream = None
         if match:

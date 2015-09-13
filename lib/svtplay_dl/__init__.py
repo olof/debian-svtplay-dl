@@ -10,7 +10,6 @@ from optparse import OptionParser
 from svtplay_dl.error import UIException
 from svtplay_dl.log import log
 from svtplay_dl.utils import select_quality, list_quality
-from svtplay_dl.utils.urllib import URLError
 from svtplay_dl.service import service_handler, Generic
 from svtplay_dl.fetcher import VideoRetriever
 from svtplay_dl.subtitle import subtitle
@@ -38,6 +37,7 @@ from svtplay_dl.service.qbrick import Qbrick
 from svtplay_dl.service.radioplay import Radioplay
 from svtplay_dl.service.ruv import Ruv
 from svtplay_dl.service.raw import Raw
+from svtplay_dl.service.solidtango import Solidtango
 from svtplay_dl.service.sr import Sr
 from svtplay_dl.service.svtplay import Svtplay
 from svtplay_dl.service.tv4play import Tv4play
@@ -47,7 +47,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "0.10.2015.08.24"
+__version__ = "0.20.2015.09.13"
 
 sites = [
     Aftonbladet,
@@ -70,6 +70,7 @@ sites = [
     Picsearch,
     Ruv,
     Radioplay,
+    Solidtango,
     Sr,
     Svtplay,
     OppetArkiv,
@@ -128,14 +129,12 @@ class Options(object):
         self.exclude = None
 
 def get_media(url, options):
-
+    if "http" not in url[:4]:
+        url = "http://%s" % url
     stream = service_handler(sites, url)
     if not stream:
-        try:
-            url, stream = Generic().get(sites, url)
-        except URLError as e:
-            log.error("Cant find that page: %s", e.reason)
-            return
+        generic = Generic(url)
+        url, stream = generic.get(sites)
     if not stream:
         if url.find(".f4m") > 0 or url.find(".m3u8") > 0:
             stream = Raw(url)
@@ -165,18 +164,10 @@ def get_media(url, options):
 
             log.info("Episode %d of %d", idx + 1, len(episodes))
 
-            try:
-                # get_one_media overwrites options.output...
-                get_one_media(substream, copy.copy(options))
-            except URLError as e:
-                log.error("Cant find that page: %s", e.reason)
-                return
+            # get_one_media overwrites options.output...
+            get_one_media(substream, copy.copy(options))
     else:
-        try:
-            get_one_media(stream, options)
-        except URLError as e:
-            log.error("Cant find that page: %s", e.reason)
-            sys.exit(2)
+        get_one_media(stream, options)
 
 def get_one_media(stream, options):
     # Make an automagic filename
@@ -185,16 +176,28 @@ def get_one_media(stream, options):
 
     videos = []
     subs = []
+    error = []
     streams = stream.get(options)
-    for i in streams:
-        if isinstance(i, VideoRetriever):
-            if options.preferred:
-                if options.preferred.lower() == i.name():
+    try:
+        for i in streams:
+            if isinstance(i, VideoRetriever):
+                if options.preferred:
+                    if options.preferred.lower() == i.name():
+                        videos.append(i)
+                else:
                     videos.append(i)
-            else:
-                videos.append(i)
-        if isinstance(i, subtitle):
-            subs.append(i)
+            if isinstance(i, subtitle):
+                subs.append(i)
+            if isinstance(i, Exception):
+                error.append(i)
+    except Exception as e:
+        if options.verbose:
+            raise e
+        else:
+            print("Script crashed. please run the script again and add --verbose as an argument")
+            print("Make an issue with the url you used and include the stacktrace. please include the version of the script")
+        sys.exit(3)
+
 
     if options.subtitle and options.output != "-":
         if subs:
@@ -203,7 +206,7 @@ def get_one_media(stream, options):
             return
 
     if len(videos) == 0:
-        log.error("Can't find any streams for that url")
+        log.error(error[0].args[0])
     else:
         if options.list_quality:
             list_quality(videos)
@@ -219,7 +222,7 @@ def get_one_media(stream, options):
         except UIException as e:
             if options.verbose:
                 raise e
-            log.error(e.message)
+            log.error(e)
             sys.exit(2)
 
         if options.thumbnail and hasattr(stream, "get_thumbnail"):

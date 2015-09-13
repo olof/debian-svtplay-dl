@@ -3,7 +3,6 @@
 from __future__ import absolute_import
 import re
 
-from svtplay_dl.utils import get_http_data
 from svtplay_dl.service.svtplay import Svtplay
 from svtplay_dl.log import log
 
@@ -12,10 +11,7 @@ class OppetArkiv(Svtplay):
 
     def find_all_episodes(self, options):
         page = 1
-        error, data = self.get_urldata()
-        if error:
-            log.error("Cant get web page")
-            return
+        data = self.get_urldata()
         match = re.search(r'"/etikett/titel/([^"/]+)', data)
         if match is None:
             match = re.search(r'"http://www.oppetarkiv.se/etikett/titel/([^/]+)/', self.url)
@@ -34,7 +30,7 @@ class OppetArkiv(Svtplay):
 
         while more:
             url = "http://www.oppetarkiv.se/etikett/titel/%s/?sida=%s&sort=%s&embed=true" % (program, page, sort)
-            error, data = get_http_data(url)
+            data = self.http.request("get", url).text
             visa = re.search(r'svtXColorDarkLightGrey', data)
             if not visa:
                 more = False

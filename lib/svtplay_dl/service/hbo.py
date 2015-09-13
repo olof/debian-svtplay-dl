@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 
 from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, is_py2_old
+from svtplay_dl.utils import is_py2_old
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import RTMP
 
@@ -23,6 +23,7 @@ class Hbo(Service):
             return
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         match = re.search("^/(.*).html", other)
@@ -30,17 +31,11 @@ class Hbo(Service):
             log.error("Cant find video file")
             return
         url = "http://www.hbo.com/data/content/%s.xml" % match.group(1)
-        error, data = get_http_data(url)
-        if error:
-            log.error("Cant get stream info")
-            return
+        data = self.http.request("get", url).content
         xml = ET.XML(data)
         videoid = xml.find("content")[1].find("videoId").text
         url = "http://render.cdn.hbo.com/data/content/global/videos/data/%s.xml" % videoid
-        error, data = get_http_data(url)
-        if error:
-            log.error("Cant get stream info")
-            return
+        data = self.http.request("get", url).content
         xml = ET.XML(data)
         ss = xml.find("videos")
         if is_py2_old:

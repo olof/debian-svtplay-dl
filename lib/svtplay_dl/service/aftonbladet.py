@@ -6,27 +6,25 @@ import json
 import copy
 
 from svtplay_dl.service import Service
-from svtplay_dl.utils import get_http_data, decode_html_entities
-from svtplay_dl.log import log
+from svtplay_dl.utils import decode_html_entities
+from svtplay_dl.error import ServiceError
 from svtplay_dl.fetcher.hls import HLS, hlsparse
 
 class Aftonbladet(Service):
     supported_domains = ['tv.aftonbladet.se']
 
     def get(self, options):
-        error, data = self.get_urldata()
-        if error:
-            log.error("Cant download page")
-            return
+        data = self.get_urldata()
 
         if self.exclude(options):
+            yield ServiceError("Excluding video")
             return
 
         match = re.search('data-aptomaId="([-0-9a-z]+)"', data)
         if not match:
             match = re.search('data-player-config="([^"]+)"', data)
             if not match:
-                log.error("Can't find video info")
+                yield ServiceError("Can't find video info")
                 return
             janson = json.loads(decode_html_entities(match.group(1)))
             videoId = janson["videoId"]
@@ -34,25 +32,19 @@ class Aftonbladet(Service):
             videoId = match.group(1)
             match = re.search(r'data-isLive="(\w+)"', data)
             if not match:
-                log.error("Can't find live info")
+                yield ServiceError("Can't find live info")
                 return
             if match.group(1) == "true":
                 options.live = True
 
         if not options.live:
             dataurl = "http://aftonbladet-play-metadata.cdn.drvideo.aptoma.no/video/%s.json" % videoId
-            error, data = get_http_data(dataurl)
-            if error:
-                log.error("Cant get vidoe info")
-                return
+            data = self.http.request("get", dataurl).text
             data = json.loads(data)
             videoId = data["videoId"]
 
         streamsurl = "http://aftonbladet-play-static-ext.cdn.drvideo.aptoma.no/actions/video/?id=%s&formats&callback=" % videoId
-        error, data = get_http_data(streamsurl)
-        if error:
-            log.error("Cant download video info")
-            return
+        data = self.http.request("get", streamsurl).text
         streams = json.loads(data)
         hlsstreams = streams["formats"]["hls"]
         if "level3" in hlsstreams.keys():
@@ -72,7 +64,7 @@ class Aftonbladet(Service):
             else:
                 plist = "http://%s/%s/%s" % (address, path, hls["filename"])
 
-            streams = hlsparse(plist)
+            streams = hlsparse(plist, self.http.request("get", plist).text)
             if streams:
                 for n in list(streams.keys()):
                     yield HLS(copy.copy(options), streams[n], n)
