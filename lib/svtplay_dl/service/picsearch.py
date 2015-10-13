@@ -10,6 +10,7 @@ from svtplay_dl.fetcher.rtmp import RTMP
 from svtplay_dl.fetcher.hds import hdsparse
 from svtplay_dl.error import ServiceError
 
+
 class Picsearch(Service, OpenGraphThumbMixin):
     supported_domains = ['dn.se', 'mobil.dn.se', 'di.se']
 
@@ -49,7 +50,7 @@ class Picsearch(Service, OpenGraphThumbMixin):
                 if "live" in playlist:
                     options.live = playlist["live"]
                 if playlist["url"].endswith(".f4m"):
-                    streams = hdsparse(copy.copy(options), self.http.request("get", playlist["url"], params={"hdcore": "3.7.0"}).text, playlist["url"])
+                    streams = hdsparse(options, self.http.request("get", playlist["url"], params={"hdcore": "3.7.0"}), playlist["url"])
                     if streams:
                         for n in list(streams.keys()):
                             yield streams[n]

@@ -20,6 +20,7 @@ from svtplay_dl.service.bambuser import Bambuser
 from svtplay_dl.service.bigbrother import Bigbrother
 from svtplay_dl.service.dbtv import Dbtv
 from svtplay_dl.service.disney import Disney
+from svtplay_dl.service.dplay import Dplay
 from svtplay_dl.service.dr import Dr
 from svtplay_dl.service.efn import Efn
 from svtplay_dl.service.expressen import Expressen
@@ -47,7 +48,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "0.20.2015.09.13"
+__version__ = "0.20.2015.10.08"
 
 sites = [
     Aftonbladet,
@@ -55,6 +56,7 @@ sites = [
     Bigbrother,
     Dbtv,
     Disney,
+    Dplay,
     Dr,
     Efn,
     Expressen,
@@ -80,6 +82,7 @@ sites = [
     Vimeo,
     Vg,
     Youplay]
+
 
 class Options(object):
     """
@@ -121,12 +124,14 @@ class Options(object):
         self.all_episodes = False
         self.all_last = -1
         self.force_subtitle = False
+        self.require_subtitle = False
         self.preferred = None
         self.verbose = False
         self.output_auto = False
         self.service = None
         self.cookies = None
         self.exclude = None
+
 
 def get_media(url, options):
     if "http" not in url[:4]:
@@ -169,6 +174,7 @@ def get_media(url, options):
     else:
         get_one_media(stream, options)
 
+
 def get_one_media(stream, options):
     # Make an automagic filename
     if not filename(options, stream):
@@ -198,6 +204,9 @@ def get_one_media(stream, options):
             print("Make an issue with the url you used and include the stacktrace. please include the version of the script")
         sys.exit(3)
 
+    if options.require_subtitle and not subs:
+        log.info("No subtitles available")
+        return
 
     if options.subtitle and options.output != "-":
         if subs:
@@ -252,6 +261,7 @@ def setup_log(silent, verbose=False):
     log.addHandler(hdlr)
     log.setLevel(level)
 
+
 def main():
     """ Main program """
     usage = "Usage: %prog [options] url"
@@ -287,6 +297,8 @@ def main():
                       help="download subtitle from the site if available")
     parser.add_option("--force-subtitle", dest="force_subtitle", default=False,
                       action="store_true", help="download only subtitle if its used with -S")
+    parser.add_option("--require-subtitle", dest="require_subtitle", default=False,
+                      action="store_true", help="download only if a subtitle is available")
     parser.add_option("-u", "--username", default=None,
                       help="username")
     parser.add_option("-p", "--password", default=None,
@@ -316,6 +328,8 @@ def main():
         options.exclude = options.exclude.split(",")
     if options.force_subtitle:
         options.subtitle = True
+    if options.require_subtitle:
+        options.subtitle = True
     options = mergeParserOption(Options(), options)
     setup_log(options.silent, options.verbose)
 
@@ -329,6 +343,7 @@ def main():
         get_media(url, options)
     except KeyboardInterrupt:
         print("")
+
 
 def mergeParserOption(options, parser):
     options.output = parser.output
@@ -347,6 +362,7 @@ def mergeParserOption(options, parser):
     options.all_episodes = parser.all_episodes
     options.all_last = parser.all_last
     options.force_subtitle = parser.force_subtitle
+    options.require_subtitle = parser.require_subtitle
     options.preferred = parser.preferred
     options.verbose = parser.verbose
     options.exclude = parser.exclude

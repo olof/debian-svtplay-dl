@@ -77,6 +77,10 @@ Download subtitle with the media if available.
 
 Download only subtitle if its used with -S.
 
+=head3 --require-subtitle
+
+Download only if a subtitle is available
+
 =head3 --username=USERNAME  -u USERNAME
 
 Username, if the service requires authentication.
@@ -138,6 +142,8 @@ Do not download any video, but instead print the URL.
 
 =item * Dagens Nyheter: L<http://dn.se/>
 
+=item * Dplay: L[<http://www.dplay.se/>
+
 =item * DR: L<http://dr.dk/>
 
 =item * EFN: L<http://www.efn.se/>
@@ -149,6 +155,8 @@ Do not download any video, but instead print the URL.
 =item * Kanal9 Play: L<http://kanal9play.se/>
 
 =item * Öppet Arkiv: L<http://oppetarkiv.se/>
+
+=item * Svenska kennelklubben play: L<http://www.skkplay.se/>
 
 =item * Svenska Dagbladet: L<http://svd.se/>
 

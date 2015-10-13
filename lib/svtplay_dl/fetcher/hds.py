@@ -5,6 +5,7 @@ import base64
 import struct
 import logging
 import binascii
+import copy
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.output import progressbar, progress_stream, ETA, output
@@ -12,6 +13,7 @@ from svtplay_dl.utils import is_py2_old, is_py2, is_py3
 from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.error import UIException
 from svtplay_dl.fetcher import VideoRetriever
+from svtplay_dl.error import ServiceError
 
 log = logging.getLogger('svtplay_dl')
 
@@ -39,10 +41,14 @@ class LiveHDSException(HDSException):
         super(LiveHDSException, self).__init__(
             url, "This is a live HDS stream, and they are not supported.")
 
-def hdsparse(options, data, manifest):
+
+def hdsparse(options, res, manifest):
     streams = {}
     bootstrap = {}
-    xml = ET.XML(data)
+    if res.status_code == 403:
+        streams[0] = ServiceError("Can't read HDS playlist. permission denied")
+        return streams
+    xml = ET.XML(res.text)
 
     if is_py2_old:
         bootstrapIter = xml.getiterator("{http://ns.adobe.com/f4m/1.0}bootstrapInfo")
@@ -52,8 +58,8 @@ def hdsparse(options, data, manifest):
         mediaIter = xml.iter("{http://ns.adobe.com/f4m/1.0}media")
 
     if xml.find("{http://ns.adobe.com/f4m/1.0}drmAdditionalHeader") is not None:
-        log.error("HDS DRM protected content.")
-        return
+        streams[0] = ServiceError("HDS DRM protected content.")
+        return streams
     for i in bootstrapIter:
         if "id" in i.attrib:
             bootstrap[i.attrib["id"]] = i.text
@@ -61,14 +67,16 @@ def hdsparse(options, data, manifest):
             bootstrap["0"] = i.text
     parse = urlparse(manifest)
     querystring = parse.query
+    manifest = "%s://%s%s" % (parse.scheme, parse.netloc, parse.path)
     for i in mediaIter:
         if len(bootstrap) == 1:
             bootstrapid = bootstrap["0"]
         else:
             bootstrapid = bootstrap[i.attrib["bootstrapInfoId"]]
-        streams[int(i.attrib["bitrate"])] = HDS(options, i.attrib["url"], i.attrib["bitrate"], manifest=manifest, bootstrap=bootstrapid,
-                                                metadata=i.find("{http://ns.adobe.com/f4m/1.0}metadata").text, querystring=querystring)
+        streams[int(i.attrib["bitrate"])] = HDS(copy.copy(options), i.attrib["url"], i.attrib["bitrate"], manifest=manifest, bootstrap=bootstrapid,
+                                                metadata=i.find("{http://ns.adobe.com/f4m/1.0}metadata").text, querystring=querystring, cookies=res.cookies)
     return streams
+
 
 class HDS(VideoRetriever):
     def name(self):
@@ -79,6 +87,7 @@ class HDS(VideoRetriever):
             raise LiveHDSException(self.url)
 
         querystring = self.kwargs["querystring"]
+        cookies = self.kwargs["cookies"]
         bootstrap = base64.b64decode(self.kwargs["bootstrap"])
         box = readboxtype(bootstrap, 0)
         antal = None
@@ -105,7 +114,7 @@ class HDS(VideoRetriever):
             if self.options.output != "-":
                 eta.update(i)
                 progressbar(total, i, ''.join(["ETA: ", str(eta)]))
-            data = self.http.request("get", url)
+            data = self.http.request("get", url, cookies=cookies)
             if data.status_code == 404:
                 break
             data = data.content
@@ -118,28 +127,35 @@ class HDS(VideoRetriever):
             file_d.close()
             progress_stream.write('\n')
 
+
 def readbyte(data, pos):
     return struct.unpack("B", bytes(_chr(data[pos]), "ascii"))[0]
+
 
 def read16(data, pos):
     endpos = pos + 2
     return struct.unpack(">H", data[pos:endpos])[0]
 
+
 def read24(data, pos):
     end = pos + 3
     return struct.unpack(">L", "\x00" + data[pos:end])[0]
+
 
 def read32(data, pos):
     end = pos + 4
     return struct.unpack(">i", data[pos:end])[0]
 
+
 def readu32(data, pos):
     end = pos + 4
     return struct.unpack(">I", data[pos:end])[0]
 
+
 def read64(data, pos):
     end = pos + 8
     return struct.unpack(">Q", data[pos:end])[0]
+
 
 def readstring(data, pos):
     length = 0
@@ -150,6 +166,7 @@ def readstring(data, pos):
     pos += length + 1
     return pos, string
 
+
 def readboxtype(data, pos):
     boxsize = read32(data, pos)
     tpos = pos + 4
@@ -159,6 +176,7 @@ def readboxtype(data, pos):
         boxsize -= 8
         pos += 8
         return pos, boxsize, boxtype
+
 
 # Note! A lot of variable assignments are commented out. These are
 # accessible values that we currently don't use.
@@ -234,6 +252,7 @@ def readbox(data, pos):
     antal[1]["first"] = first
     return antal
 
+
 # Note! A lot of variable assignments are commented out. These are
 # accessible values that we currently don't use.
 def readafrtbox(data, pos):
@@ -269,6 +288,7 @@ def readafrtbox(data, pos):
         i += 1
     return first
 
+
 # Note! A lot of variable assignments are commented out. These are
 # accessible values that we currently don't use.
 def readasrtbox(data, pos):
@@ -300,6 +320,7 @@ def readasrtbox(data, pos):
         ret[tmp] = {"first": firstseg, "total": fragPerSeg}
         i += 1
     return ret
+
 
 def decode_f4f(fragID, fragData):
     start = fragData.find(b"mdat") + 4

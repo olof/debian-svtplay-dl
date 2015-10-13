@@ -11,11 +11,12 @@ from svtplay_dl.utils.urllib import urlparse, parse_qs, quote_plus
 from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.utils import is_py2_old, filenamify
 from svtplay_dl.log import log
-from svtplay_dl.fetcher.hls import hlsparse, HLS
+from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.fetcher.rtmp import RTMP
 from svtplay_dl.fetcher.hds import hdsparse
 from svtplay_dl.subtitle import subtitle
 from svtplay_dl.error import ServiceError
+
 
 class Tv4play(Service, OpenGraphThumbMixin):
     supported_domains = ['tv4play.se', 'tv4.se']
@@ -34,19 +35,11 @@ class Tv4play(Service, OpenGraphThumbMixin):
             return
 
         if options.username and options.password:
-            data = self.http.request("get", "https://www.tv4play.se/session/new?https=")
-            auth_token = re.search('name="authenticity_token" ([a-z]+="[^"]+" )?value="([^"]+)"', data.text)
-            if not auth_token:
-                yield ServiceError("Can't find authenticity_token needed for user / password")
+            work = self._login(options.username, options.password)
+            if isinstance(work, Exception):
+                yield work
                 return
-            url = "https://www.tv4play.se/session"
-            postdata = {"user_name" : options.username, "password": options.password, "authenticity_token":auth_token.group(2), "https": ""}
-            data = self.http.request("post", url, data=postdata, cookies=self.cookies)
-            self.cookies = data.cookies
-            fail = re.search("<p class='failed-login'>([^<]+)</p>", data.text)
-            if fail:
-                yield ServiceError(fail.group(1))
-                return
+
         url = "http://premium.tv4play.se/api/web/asset/%s/play" % vid
         data = self.http.request("get", url, cookies=self.cookies)
         if data.status_code == 401:
@@ -79,7 +72,11 @@ class Tv4play(Service, OpenGraphThumbMixin):
         if options.output_auto:
             directory = os.path.dirname(options.output)
             options.service = "tv4play"
-            title = "%s-%s-%s" % (options.output, vid, options.service)
+            basename = self._autoname(vid)
+            if basename is None:
+                yield ServiceError("Cant find vid id for autonaming")
+                return
+            title = "%s-%s-%s" % (basename, vid, options.service)
             title = filenamify(title)
             if len(directory):
                 options.output = os.path.join(directory, title)
@@ -99,7 +96,7 @@ class Tv4play(Service, OpenGraphThumbMixin):
                     options.other = "-W %s -y %s" % (swf, i.find("url").text)
                     yield RTMP(copy.copy(options), i.find("base").text, i.find("bitrate").text)
                 elif parse.path[len(parse.path)-3:len(parse.path)] == "f4m":
-                    streams = hdsparse(copy.copy(options), self.http.request("get", i.find("url").text, params={"hdcore": "3.7.0"}).text, i.find("url").text)
+                    streams = hdsparse(options, self.http.request("get", i.find("url").text, params={"hdcore": "3.7.0"}), i.find("url").text)
                     if streams:
                         for n in list(streams.keys()):
                             yield streams[n]
@@ -118,22 +115,46 @@ class Tv4play(Service, OpenGraphThumbMixin):
             if i.find("mediaFormat").text == "mp4":
                 parse = urlparse(i.find("url").text)
                 if parse.path.endswith("m3u8"):
-                    streams = hlsparse(i.find("url").text, self.http.request("get", i.find("url").text).text)
+                    streams = hlsparse(options, self.http.request("get", i.find("url").text), i.find("url").text)
                     for n in list(streams.keys()):
-                        yield HLS(copy.copy(options), streams[n], n)
+                        yield streams[n]
 
-    def find_all_episodes(self, options):
+    def _get_show_info(self):
         parse = urlparse(self.url)
         show = parse.path[parse.path.find("/", 1)+1:]
         if not re.search("%", show):
             show = quote_plus(show)
         data = self.http.request("get", "http://webapi.tv4play.se/play/video_assets?type=episode&is_live=false&platform=web&node_nids=%s&per_page=99999" % show).text
         jsondata = json.loads(data)
+        return jsondata
+
+    def _autoname(self, vid):
+        jsondata = self._get_show_info()
+        for i in jsondata["results"]:
+            if vid == i["id"]:
+                return i["title"]
+        return None
+
+    def find_all_episodes(self, options):
+        premium = False
+        if options.username and options.password:
+            premium = self._login(options.username, options.password)
+            if isinstance(premium, Exception):
+                log.error(premium.message)
+                return None
+
+        jsondata = self._get_show_info()
+
         episodes = []
         n = 1
         for i in jsondata["results"]:
+            if premium:
+                text = "availability_group_premium"
+            else:
+                text = "availability_group_free"
+
             try:
-                days = int(i["availability"]["availability_group_free"])
+                days = int(i["availability"][text])
             except (ValueError, TypeError):
                 days = 999
             if days > 0:
@@ -146,6 +167,21 @@ class Tv4play(Service, OpenGraphThumbMixin):
                 n += 1
 
         return episodes
+
+    def _login(self, username, password):
+        data = self.http.request("get", "https://www.tv4play.se/session/new?https=")
+        auth_token = re.search('name="authenticity_token" ([a-z]+="[^"]+" )?value="([^"]+)"', data.text)
+        if not auth_token:
+            return ServiceError("Can't find authenticity_token needed for user / password")
+        url = "https://www.tv4play.se/session"
+        postdata = {"user_name" : username, "password": password, "authenticity_token":auth_token.group(2), "https": ""}
+        data = self.http.request("post", url, data=postdata, cookies=self.cookies)
+        self.cookies = data.cookies
+        fail = re.search("<p class='failed-login'>([^<]+)</p>", data.text)
+        if fail:
+            return ServiceError(fail.group(1))
+        return True
+
 
 def findvid(url, data):
     parse = urlparse(url)

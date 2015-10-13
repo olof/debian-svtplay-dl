@@ -10,6 +10,7 @@ from svtplay_dl.fetcher.hls import HLS, hlsparse
 from svtplay_dl.fetcher.http import HTTP
 from svtplay_dl.error import ServiceError
 
+
 class Ruv(Service):
     supported_domains = ['ruv.is']
 
@@ -27,9 +28,9 @@ class Ruv(Service):
             if match:
                 janson = json.loads(match.group(1))
                 options.live = checklive(janson["result"][1])
-                streams = hlsparse(janson["result"][1], self.http.request("get", janson["result"][1]).text)
+                streams = hlsparse(options, self.http.request("get", janson["result"][1]), janson["result"][1])
                 for n in list(streams.keys()):
-                    yield HLS(copy.copy(options), streams[n], n)
+                    yield streams[n]
             else:
                 yield ServiceError("Can't find json info")
         else:
@@ -43,6 +44,7 @@ class Ruv(Service):
                 m3u8_url = match.group(1)
                 options.live = checklive(m3u8_url)
                 yield HLS(copy.copy(options), m3u8_url, 800)
+
 
 def checklive(url):
     return True if re.search("live", url) else False
