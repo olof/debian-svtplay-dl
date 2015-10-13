@@ -2,9 +2,9 @@
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
 import re
-
 from svtplay_dl.service.svtplay import Svtplay
 from svtplay_dl.log import log
+
 
 class OppetArkiv(Svtplay):
     supported_domains = ['oppetarkiv.se']
@@ -19,7 +19,6 @@ class OppetArkiv(Svtplay):
                 log.error("Couldn't find title")
                 return
         program = match.group(1)
-        more = True
         episodes = []
 
         n = 0
@@ -28,12 +27,13 @@ class OppetArkiv(Svtplay):
         else:
             sort = "tid_stigande"
 
-        while more:
+        while True:
             url = "http://www.oppetarkiv.se/etikett/titel/%s/?sida=%s&sort=%s&embed=true" % (program, page, sort)
-            data = self.http.request("get", url).text
-            visa = re.search(r'svtXColorDarkLightGrey', data)
-            if not visa:
-                more = False
+            data = self.http.request("get", url)
+            if data.status_code == 404:
+                break
+
+            data = data.text
             regex = re.compile(r'href="(/video/[^"]+)"')
             for match in regex.finditer(data):
                 if n == options.all_last:

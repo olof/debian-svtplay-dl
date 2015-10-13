@@ -4,11 +4,12 @@ from __future__ import absolute_import
 import sys
 import os
 import re
+import copy
 
 from svtplay_dl.output import progressbar, progress_stream, ETA, output
 from svtplay_dl.log import log
 from svtplay_dl.utils.urllib import urlparse
-from svtplay_dl.error import UIException
+from svtplay_dl.error import UIException, ServiceError
 from svtplay_dl.fetcher import VideoRetriever
 
 
@@ -40,14 +41,20 @@ def _get_full_url(url, srcurl):
 
     return returl
 
-def hlsparse(url, data):
-    files = (parsem3u(data))[1]
+
+def hlsparse(options, res, url):
     streams = {}
+
+    if res.status_code == 403:
+        streams[0] = ServiceError("Can't read HDS playlist. permission denied")
+        return streams
+    files = (parsem3u(res.text))[1]
 
     for i in files:
         bitrate = float(i[1]["BANDWIDTH"])/1000
-        streams[int(bitrate)] = _get_full_url(i[0], url)
+        streams[int(bitrate)] = HLS(copy.copy(options), _get_full_url(i[0], url), bitrate, cookies=res.cookies)
     return streams
+
 
 class HLS(VideoRetriever):
     def name(self):
@@ -57,7 +64,8 @@ class HLS(VideoRetriever):
         if self.options.live and not self.options.force:
             raise LiveHLSException(self.url)
 
-        m3u8 = self.http.request("get", self.url).text
+        cookies = self.kwargs["cookies"]
+        m3u8 = self.http.request("get", self.url, cookies=cookies).text
         globaldata, files = parsem3u(m3u8)
         encrypted = False
         key = None
@@ -91,7 +99,7 @@ class HLS(VideoRetriever):
                 progressbar(len(files), n, ''.join(['ETA: ', str(eta)]))
                 n += 1
 
-            data = self.http.request("get", item)
+            data = self.http.request("get", item, cookies=cookies)
             if data.status_code == 404:
                 break
             data = data.content
@@ -102,6 +110,7 @@ class HLS(VideoRetriever):
         if self.options.output != "-":
             file_d.close()
             progress_stream.write('\n')
+
 
 def parsem3u(data):
     if not data.startswith("#EXTM3U"):

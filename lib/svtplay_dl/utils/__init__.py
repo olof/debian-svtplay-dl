@@ -28,6 +28,7 @@ except ImportError:
     print("You need to install python-requests to use this script")
     sys.exit(3)
 
+
 class HTTP(Session):
     def __init__(self, *args, **kwargs):
         Session.__init__(self, *args, **kwargs)
@@ -36,9 +37,11 @@ class HTTP(Session):
         return self.get(url, stream=True).url
 
     def request(self, method, url, *args, **kwargs):
+        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.3"}
         log.debug("HTTP getting %r", url)
-        res = Session.request(self, method, url, **kwargs)
+        res = Session.request(self, method, url, headers=headers, *args, **kwargs)
         return res
+
 
 def sort_quality(data):
     data = sorted(data, key=lambda x: (x.bitrate, x.name()), reverse=True)
@@ -47,11 +50,13 @@ def sort_quality(data):
         datas.append([i.bitrate, i.name()])
     return datas
 
+
 def list_quality(videos):
     data = sort_quality(videos)
     log.info("Quality\tMethod")
     for i in data:
         log.info("%s\t%s" % (i[0], i[1].upper()))
+
 
 def select_quality(options, streams):
     available = sorted(int(x.bitrate) for x in streams)
@@ -89,6 +94,7 @@ def select_quality(options, streams):
             stream = i
     return stream
 
+
 def ensure_unicode(s):
     """
     Ensure string is a unicode string. If it isn't it assumed it is
@@ -97,6 +103,7 @@ def ensure_unicode(s):
     if (is_py2 and isinstance(s, str)) or (is_py3 and isinstance(s, bytes)):
         s = s.decode('utf-8', 'replace')
     return s
+
 
 def decode_html_entities(s):
     """
@@ -109,6 +116,7 @@ def decode_html_entities(s):
     def unesc(m):
         return parser.unescape(m.group())
     return re.sub(r'(&[^;]+;)', unesc, ensure_unicode(s))
+
 
 def filenamify(title):
     """
@@ -134,6 +142,7 @@ def filenamify(title):
     title = re.sub(r'[-\s]+', '-', title)
 
     return title
+
 
 def download_thumbnail(options, url):
     data = Session.get(url).content

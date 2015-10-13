@@ -18,6 +18,7 @@ from svtplay_dl.fetcher.hls import HLS, hlsparse
 from svtplay_dl.subtitle import subtitle
 from svtplay_dl.error import ServiceError
 
+
 class Viaplay(Service, OpenGraphThumbMixin):
     supported_domains = [
         'tv3play.se', 'tv6play.se', 'tv8play.se', 'tv10play.se',
@@ -95,7 +96,7 @@ class Viaplay(Service, OpenGraphThumbMixin):
         if streamj["streams"]["medium"]:
             filename = streamj["streams"]["medium"]
             if ".f4m" in filename:
-                streams = hdsparse(copy.copy(options), self.http.request("get", filename, params={"hdcore": "3.7.0"}).text, filename)
+                streams = hdsparse(options, self.http.request("get", filename, params={"hdcore": "3.7.0"}), filename)
                 if streams:
                     for n in list(streams.keys()):
                         yield streams[n]
@@ -111,10 +112,10 @@ class Viaplay(Service, OpenGraphThumbMixin):
                 yield RTMP(copy.copy(options), filename, 800)
 
         if streamj["streams"]["hls"]:
-            streams = hlsparse(streamj["streams"]["hls"], self.http.request("get", streamj["streams"]["hls"]).text)
+            streams = hlsparse(options, self.http.request("get", streamj["streams"]["hls"]), streamj["streams"]["hls"])
             if streams:
                 for n in list(streams.keys()):
-                    yield HLS(copy.copy(options), streams[n], n)
+                    yield streams[n]
 
     def find_all_episodes(self, options):
         format_id = re.search(r'data-format-id="(\d+)"', self.get_urldata())
