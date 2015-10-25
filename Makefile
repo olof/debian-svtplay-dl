@@ -4,13 +4,13 @@ all: svtplay-dl
         release clean_releasedir $(RELEASE_DIR)
 
 # These variables describe the latest release:
-VERSION = 0.20
+GENERATION = 0.20
 LATEST_RELEASE_DATE = 2015.10.25
-LATEST_RELEASE = $(VERSION).$(LATEST_RELEASE_DATE)
+LATEST_RELEASE = $(GENERATION).$(LATEST_RELEASE_DATE)
 
 # If we build a new release, this is what it will be called:
 NEW_RELEASE_DATE = $(shell date +%Y.%m.%d)
-NEW_RELEASE = $(VERSION).$(NEW_RELEASE_DATE)
+NEW_RELEASE = $(GENERATION).$(NEW_RELEASE_DATE)
 RELEASE_DIR = svtplay-dl-$(NEW_RELEASE)
 
 PREFIX ?= /usr/local
@@ -27,7 +27,7 @@ MANFILE = svtplay-dl.1$(MANFILE_EXT)
 # to remove references to perl.. :-)
 POD2MAN ?= pod2man --section 1 --utf8 \
                    --center "svtplay-dl manual" \
-                   --release "svtplay-dl $(VERSION)" \
+                   --release "svtplay-dl $(GENERATION)" \
                    --date "$(LATEST_RELEASE_DATE)"
 
 PYTHON ?= /usr/bin/env python
