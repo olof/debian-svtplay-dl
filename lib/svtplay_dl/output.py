@@ -124,7 +124,6 @@ def filename(options, stream):
                 options.output = options.output.decode("latin1")
             else:
                 options.output = options.output.decode("utf-8")
-        options.output = options.output.replace('"', '').replace("'", "").rstrip('\\')
     if not options.output or os.path.isdir(options.output):
         data = ensure_unicode(stream.get_urldata())
         if data is None:
@@ -142,14 +141,14 @@ def filename(options, stream):
     return True
 
 
-def output(options, extention="mp4", openfd=True, mode="wb"):
+def output(options, extention="mp4", openfd=True, mode="wb", **kwargs):
     if is_py3:
         file_d = io.IOBase
     else:
         file_d = file
 
     if options.output != "-":
-        ext = re.search(r"(\.[a-z0-9]+)$", options.output)
+        ext = re.search(r"(\.\w{2,3})$", options.output)
         if not ext:
             options.output = "%s.%s" % (options.output, extention)
         if options.output_auto and ext:
@@ -168,7 +167,7 @@ def output(options, extention="mp4", openfd=True, mode="wb"):
                     log.error("File already exists. Use --force to overwrite")
                     return None
         if openfd:
-            file_d = open(options.output, mode)
+            file_d = open(options.output, mode, **kwargs)
     else:
         if openfd:
             if is_py3:
