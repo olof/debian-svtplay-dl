@@ -1,3 +1,11 @@
+svtplay-dl (0.20.2015.10.25-1) unstable; urgency=medium
+
+  * Imported Upstream version 0.20.2015.10.25
+  * make: Make it possible to override VERSION
+  * debian/rules: Override VERSION, as seen in --version
+
+ -- Olof Johansson <olof@ethup.se>  Mon, 26 Oct 2015 00:03:23 +0100
+
 svtplay-dl (0.20.2015.10.08-1) unstable; urgency=medium
 
   * Imported Upstream version 0.20.2015.10.08
