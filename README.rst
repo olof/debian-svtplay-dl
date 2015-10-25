@@ -25,6 +25,14 @@ svtplay-dl is available in Debian in Jessie and later and Ubuntu in
 
 … as root.
 
+Other systems with python
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+::
+
+    pip install svtplay-dl
+
 From source
 ~~~~~~~~~~~
 
@@ -42,7 +50,7 @@ you don’t have them, some features will not be working.
 
 -  `RTMPDump`_ 2.4 or higher to download RTMP streams.
 -  `PyCrypto`_ to download encrypted HLS streams
--  [Requests][http://www.python-requests.org/]
+-  `Requests`_
 
 To install it, run
 
@@ -112,6 +120,7 @@ This project is licensed under `The MIT License (MIT)`_.
 .. _Homebrew: http://brew.sh/
 .. _RTMPDump: http://rtmpdump.mplayerhq.hu/
 .. _PyCrypto: https://www.dlitz.net/software/pycrypto/
+.. _Requests: http://www.python-requests.org/
 .. _on github: https://github.com/spaam/svtplay-dl/issues
 .. _The MIT License (MIT): LICENSE
 

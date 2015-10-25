@@ -37,7 +37,11 @@ class HTTP(Session):
         return self.get(url, stream=True).url
 
     def request(self, method, url, *args, **kwargs):
-        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.3"}
+        headers = kwargs.pop("headers", None)
+        if headers:
+            headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.3"
+        else:
+            headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.3"}
         log.debug("HTTP getting %r", url)
         res = Session.request(self, method, url, headers=headers, *args, **kwargs)
         return res
@@ -123,7 +127,7 @@ def filenamify(title):
     Convert a string to something suitable as a file name.
 
         >>> print(filenamify(u'Matlagning del 1 av 10 - R\xe4ksm\xf6rg\xe5s | SVT Play'))
-        matlagning-del-1-av-10-raksmorgas-svt-play
+        matlagning.del.1.av.10.-.raksmorgas.svt.play
 
     """
     # ensure it is unicode
@@ -134,12 +138,14 @@ def filenamify(title):
 
     # Drop any non ascii letters/digits
     title = re.sub(r'[^a-zA-Z0-9 -.]', '', title)
+    # Remove " and '
+    title = re.sub('[\"\']', '', title)
     # Drop any leading/trailing whitespace that may have appeared
     title = title.strip()
     # Lowercase
     title = title.lower()
-    # Replace whitespace with dash
-    title = re.sub(r'[-\s]+', '-', title)
+    # Replace whitespace with dot
+    title = re.sub(r'\s+', '.', title)
 
     return title
 

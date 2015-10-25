@@ -48,7 +48,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "0.20.2015.10.08"
+__version__ = "0.20.2015.10.25"
 
 sites = [
     Aftonbladet,
@@ -131,6 +131,7 @@ class Options(object):
         self.service = None
         self.cookies = None
         self.exclude = None
+        self.get_url = False
 
 
 def get_media(url, options):
@@ -215,7 +216,8 @@ def get_one_media(stream, options):
             return
 
     if len(videos) == 0:
-        log.error(error[0].args[0])
+        if len(error) > 0:
+            log.error(error[0].args[0])
     else:
         if options.list_quality:
             list_quality(videos)
