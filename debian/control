@@ -4,7 +4,8 @@ Priority: optional
 Maintainer: Olof Johansson <olof@ethup.se>
 Standards-Version: 3.9.6
 Build-Depends: debhelper (>= 9), dpkg-dev (>= 1.17.0), zip, perl,
-               python (>= 2.6.6-3~), python-nose, python-mock
+               python (>= 2.6.6-3~), python-nose, python-mock,
+               python-requests
 Homepage: https://github.com/spaam/svtplay-dl
 Vcs-Git: git://github.com/olof/debian-svtplay-dl.git
 Vcs-Browser: https://github.com/olof/debian-svtplay-dl
