@@ -1,3 +1,9 @@
+svtplay-dl (0.20.2015.10.25-2) unstable; urgency=medium
+
+  * add missing python-requests build-depends
+
+ -- Olof Johansson <olof@ethup.se>  Thu, 05 Nov 2015 19:16:29 +0100
+
 svtplay-dl (0.20.2015.10.25-1) unstable; urgency=medium
 
   * Imported Upstream version 0.20.2015.10.25
