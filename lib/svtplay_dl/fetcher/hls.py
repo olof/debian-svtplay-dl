@@ -46,7 +46,7 @@ def hlsparse(options, res, url):
     streams = {}
 
     if res.status_code == 403:
-        streams[0] = ServiceError("Can't read HDS playlist. permission denied")
+        streams[0] = ServiceError("Can't read HLS playlist. permission denied")
         return streams
     files = (parsem3u(res.text))[1]
 
@@ -135,7 +135,10 @@ def parsem3u(data):
         elif l.startswith("#EXT-X-ENDLIST"):
             break
         elif l.startswith("#EXT-X-"):
-            globdata.update(dict([l[7:].strip().split(":", 1)]))
+            line = [l[7:].strip().split(":", 1)]
+            if len(line[0]) == 1:
+                line[0].append("None")
+            globdata.update(dict(line))
         elif l.startswith("#EXTINF:"):
             dur, title = l[8:].strip().split(",", 1)
             streaminfo['duration'] = dur

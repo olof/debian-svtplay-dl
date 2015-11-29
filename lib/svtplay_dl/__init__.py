@@ -48,7 +48,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "0.20.2015.10.25"
+__version__ = "0.20.2015.11.29"
 
 sites = [
     Aftonbladet,
@@ -216,8 +216,8 @@ def get_one_media(stream, options):
             return
 
     if len(videos) == 0:
-        if len(error) > 0:
-            log.error(error[0].args[0])
+        for exc in error:
+            log.error(str(exc))
     else:
         if options.list_quality:
             list_quality(videos)
