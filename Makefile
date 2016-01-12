@@ -4,8 +4,8 @@ all: svtplay-dl
         release clean_releasedir $(RELEASE_DIR)
 
 # These variables describe the latest release:
-VERSION = 0.20
-LATEST_RELEASE_DATE = 2015.11.29
+VERSION = 0.30
+LATEST_RELEASE_DATE = 2016.01.10
 LATEST_RELEASE = $(VERSION).$(LATEST_RELEASE_DATE)
 
 # If we build a new release, this is what it will be called:
@@ -70,7 +70,7 @@ doctest: svtplay-dl
 $(RELEASE_DIR): clean_releasedir
 	mkdir $(RELEASE_DIR)
 	cd $(RELEASE_DIR) && git clone -b master ../ . && \
-		make svtplay-dl $(MANFILE)
+		make $(MANFILE)
 
 clean_releasedir:
 	rm -rf $(RELEASE_DIR)
@@ -79,9 +79,8 @@ release: $(RELEASE_DIR) release-test
 	set -e; cd $(RELEASE_DIR) && \
 		sed -i -re 's/^(LATEST_RELEASE_DATE = ).*/\1$(NEW_RELEASE_DATE)/' Makefile;\
 		sed -i -re 's/^(__version__ = ).*/\1"$(NEW_RELEASE)"/' lib/svtplay_dl/__init__.py;\
-		make svtplay-dl VERSION=$(NEW_RELEASE); \
-		git add svtplay-dl Makefile lib/svtplay_dl/__init__.py; \
-		git commit -m "Prepare for release $(NEW_RELEASE)";
+		git add Makefile lib/svtplay_dl/__init__.py; \
+		git commit -m "New release $(NEW_RELEASE)";
 	(cd $(RELEASE_DIR) && git format-patch --stdout HEAD^) | git am
 
 	git tag -m "New version $(NEW_RELEASE)" \

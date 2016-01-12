@@ -21,12 +21,7 @@ from svtplay_dl.error import ServiceError
 class Tv4play(Service, OpenGraphThumbMixin):
     supported_domains = ['tv4play.se', 'tv4.se']
 
-    def __init__(self, url):
-        Service.__init__(self, url)
-        self.subtitle = None
-        self.cookies = {}
-
-    def get(self, options):
+    def get(self):
         data = self.get_urldata()
 
         vid = findvid(self.url, data)
@@ -34,8 +29,8 @@ class Tv4play(Service, OpenGraphThumbMixin):
             yield ServiceError("Can't find video id for %s" % self.url)
             return
 
-        if options.username and options.password:
-            work = self._login(options.username, options.password)
+        if self.options.username and self.options.password:
+            work = self._login(self.options.username, self.options.password)
             if isinstance(work, Exception):
                 yield work
                 return
@@ -64,26 +59,26 @@ class Tv4play(Service, OpenGraphThumbMixin):
 
         if xml.find("live").text:
             if xml.find("live").text != "false":
-                options.live = True
+                self.options.live = True
         if xml.find("drmProtected").text == "true":
             yield ServiceError("We cant download DRM protected content from this site.")
             return
 
-        if options.output_auto:
-            directory = os.path.dirname(options.output)
-            options.service = "tv4play"
+        if self.options.output_auto:
+            directory = os.path.dirname(self.options.output)
+            self.options.service = "tv4play"
             basename = self._autoname(vid)
             if basename is None:
                 yield ServiceError("Cant find vid id for autonaming")
                 return
-            title = "%s-%s-%s" % (basename, vid, options.service)
+            title = "%s-%s-%s" % (basename, vid, self.options.service)
             title = filenamify(title)
             if len(directory):
-                options.output = os.path.join(directory, title)
+                self.options.output = os.path.join(directory, title)
             else:
-                options.output = title
+                self.options.output = title
 
-        if self.exclude(options):
+        if self.exclude(self.options):
             yield ServiceError("Excluding video")
             return
 
@@ -93,15 +88,15 @@ class Tv4play(Service, OpenGraphThumbMixin):
                 parse = urlparse(i.find("url").text)
                 if "rtmp" in base.scheme:
                     swf = "http://www.tv4play.se/flash/tv4playflashlets.swf"
-                    options.other = "-W %s -y %s" % (swf, i.find("url").text)
-                    yield RTMP(copy.copy(options), i.find("base").text, i.find("bitrate").text)
+                    self.options.other = "-W %s -y %s" % (swf, i.find("url").text)
+                    yield RTMP(copy.copy(self.options), i.find("base").text, i.find("bitrate").text)
                 elif parse.path[len(parse.path)-3:len(parse.path)] == "f4m":
-                    streams = hdsparse(options, self.http.request("get", i.find("url").text, params={"hdcore": "3.7.0"}), i.find("url").text)
+                    streams = hdsparse(self.options, self.http.request("get", i.find("url").text, params={"hdcore": "3.7.0"}), i.find("url").text)
                     if streams:
                         for n in list(streams.keys()):
                             yield streams[n]
             elif i.find("mediaFormat").text == "smi":
-                yield subtitle(copy.copy(options), "smi", i.find("url").text)
+                yield subtitle(copy.copy(self.options), "smi", i.find("url").text)
 
         url = "http://premium.tv4play.se/api/web/asset/%s/play?protocol=hls" % vid
         data = self.http.request("get", url, cookies=self.cookies).content
@@ -115,25 +110,53 @@ class Tv4play(Service, OpenGraphThumbMixin):
             if i.find("mediaFormat").text == "mp4":
                 parse = urlparse(i.find("url").text)
                 if parse.path.endswith("m3u8"):
-                    streams = hlsparse(options, self.http.request("get", i.find("url").text), i.find("url").text)
+                    streams = hlsparse(self.options, self.http.request("get", i.find("url").text), i.find("url").text)
                     for n in list(streams.keys()):
                         yield streams[n]
 
     def _get_show_info(self):
-        parse = urlparse(self.url)
-        show = parse.path[parse.path.find("/", 1)+1:]
-        if not re.search("%", show):
-            show = quote_plus(show)
+        show = self._get_showname(self.url)
         data = self.http.request("get", "http://webapi.tv4play.se/play/video_assets?type=episode&is_live=false&platform=web&node_nids=%s&per_page=99999" % show).text
         jsondata = json.loads(data)
         return jsondata
+
+    def _get_clip_info(self, vid):
+        show = self._get_showname(self.url)
+        page = 1
+        assets = page * 1000
+        run = True
+        while run:
+            data = self.http.request("get", "http://webapi.tv4play.se/play/video_assets?type=clips&is_live=false&platform=web&node_nids=%s&per_page=1000&page=%s" % (show, page)).text
+            jsondata = json.loads(data)
+            for i in jsondata["results"]:
+                if vid == i["id"]:
+                    return i["title"]
+            if not run:
+                return None
+            total = jsondata["total_hits"]
+            if assets > total:
+                run = False
+            page += 1
+            assets = page * 1000
+        return None
+
+    def _get_showname(self, url):
+        parse = urlparse(self.url)
+        if parse.path.count("/") > 2:
+            match = re.search("^/([^/]+)/", parse.path)
+            show = match.group(1)
+        else:
+            show = parse.path[parse.path.find("/", 1)+1:]
+        if not re.search("%", show):
+            show = quote_plus(show)
+        return show
 
     def _autoname(self, vid):
         jsondata = self._get_show_info()
         for i in jsondata["results"]:
             if vid == i["id"]:
                 return i["title"]
-        return None
+        return self._get_clip_info(vid)
 
     def find_all_episodes(self, options):
         premium = False

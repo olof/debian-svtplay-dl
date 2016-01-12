@@ -27,7 +27,6 @@ from svtplay_dl.service.expressen import Expressen
 from svtplay_dl.service.facebook import Facebook
 from svtplay_dl.service.hbo import Hbo
 from svtplay_dl.service.twitch import Twitch
-from svtplay_dl.service.kanal5 import Kanal5
 from svtplay_dl.service.lemonwhale import Lemonwhale
 from svtplay_dl.service.mtvnn import Mtvnn
 from svtplay_dl.service.mtvservices import Mtvservices
@@ -48,7 +47,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "0.20.2015.11.29"
+__version__ = "0.30.2016.01.10"
 
 sites = [
     Aftonbladet,
@@ -64,7 +63,6 @@ sites = [
     Hbo,
     Twitch,
     Lemonwhale,
-    Kanal5,
     Mtvservices,
     Mtvnn,
     Nrk,
@@ -115,7 +113,6 @@ class Options(object):
         self.quality = 0
         self.flexibleq = None
         self.list_quality = False
-        self.hls = False
         self.other = None
         self.subtitle = False
         self.username = None
@@ -132,18 +129,22 @@ class Options(object):
         self.cookies = None
         self.exclude = None
         self.get_url = False
+        self.ssl_verify = True
+        self.http_headers = None
+        self.stream_prio = None
 
 
 def get_media(url, options):
     if "http" not in url[:4]:
         url = "http://%s" % url
-    stream = service_handler(sites, url)
+
+    stream = service_handler(sites, options, url)
     if not stream:
-        generic = Generic(url)
+        generic = Generic(options, url)
         url, stream = generic.get(sites)
     if not stream:
         if url.find(".f4m") > 0 or url.find(".m3u8") > 0:
-            stream = Raw(url)
+            stream = Raw(options, url)
         if not stream:
             log.error("That site is not supported. Make a ticket or send a message")
             sys.exit(2)
@@ -166,7 +167,7 @@ def get_media(url, options):
             if o == url:
                 substream = stream
             else:
-                substream = service_handler(sites, o)
+                substream = service_handler(sites, options, o)
 
             log.info("Episode %d of %d", idx + 1, len(episodes))
 
@@ -178,13 +179,13 @@ def get_media(url, options):
 
 def get_one_media(stream, options):
     # Make an automagic filename
-    if not filename(options, stream):
+    if not filename(stream):
         return
 
     videos = []
     subs = []
     error = []
-    streams = stream.get(options)
+    streams = stream.get()
     try:
         for i in streams:
             if isinstance(i, VideoRetriever):
@@ -201,8 +202,10 @@ def get_one_media(stream, options):
         if options.verbose:
             raise e
         else:
-            print("Script crashed. please run the script again and add --verbose as an argument")
-            print("Make an issue with the url you used and include the stacktrace. please include the version of the script")
+            log.error("svtplay-dl crashed")
+            log.error("Run again and add --verbose as an argument, to get more information")
+            log.error("If the error persists, you can report it at https://github.com/spaam/svtplay-dl/issues")
+            log.error("Include the URL used, the stack trace and the output of svtplay-dl --version in the issue")
         sys.exit(3)
 
     if options.require_subtitle and not subs:
@@ -292,8 +295,6 @@ def main():
                       metavar="amount", dest="flexibleq", help="allow given quality (as above) to differ by an amount")
     parser.add_option("--list-quality", dest="list_quality", action="store_true", default=False,
                       help="list the quality for a video")
-    parser.add_option("-H", "--hls",
-                      action="store_true", dest="hls", default=False, help="obsolete use -P hls")
     parser.add_option("-S", "--subtitle",
                       action="store_true", dest="subtitle", default=False,
                       help="download subtitle from the site if available")
@@ -314,12 +315,18 @@ def main():
     parser.add_option("--all-last", dest="all_last", default=-1, type=int,
                       metavar="NN", help="get last NN episodes instead of all episodes")
     parser.add_option("-P", "--preferred", default=None,
-                      metavar="preferred", help="preferred download method (rtmp, hls or hds)")
+                      metavar="preferred", help="preferred download method (hls, hds, http or rtmp")
     parser.add_option("--exclude", dest="exclude", default=None,
                       metavar="WORD1,WORD2,...", help="exclude videos with the WORD(s) in the filename. comma separated.")
     parser.add_option("-g", "--get-url",
                       action="store_true", dest="get_url", default=False,
                       help="do not download any video, but instead print the URL.")
+    parser.add_option("--dont-verify-ssl-cert", action="store_false", dest="ssl_verify", default=True,
+                      help="Don't attempt to verify SSL certificates.")
+    parser.add_option("--http-header", dest="http_headers", default=None, metavar="header1=value;header2=value2",
+                      help="A header to add to each HTTP request.")
+    parser.add_option("--stream-priority", dest="stream_prio", default=None, metavar="hls,hds,http,rtmp",
+                      help="If two streams have the same quality, choose the one you prefer")
     (options, args) = parser.parse_args()
     if not args:
         parser.print_help()
@@ -356,7 +363,6 @@ def mergeParserOption(options, parser):
     options.quality = parser.quality
     options.flexibleq = parser.flexibleq
     options.list_quality = parser.list_quality
-    options.hls = parser.hls
     options.subtitle = parser.subtitle
     options.username = parser.username
     options.password = parser.password
@@ -369,4 +375,7 @@ def mergeParserOption(options, parser):
     options.verbose = parser.verbose
     options.exclude = parser.exclude
     options.get_url = parser.get_url
+    options.ssl_verify = parser.ssl_verify
+    options.http_headers = parser.http_headers
+    options.stream_prio = parser.stream_prio
     return options

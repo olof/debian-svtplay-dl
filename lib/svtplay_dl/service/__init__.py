@@ -13,11 +13,14 @@ class Service(object):
     supported_domains = []
     supported_domains_re = []
 
-    def __init__(self, _url):
+    def __init__(self, options, _url):
+        self.options = options
         self._url = _url
         self._urldata = None
         self._error = False
-        self.http = HTTP()
+        self.subtitle = None
+        self.cookies = {}
+        self.http = HTTP(options)
 
     @property
     def url(self):
@@ -149,12 +152,12 @@ class Generic(Service):
 
         return self.url, stream
 
-def service_handler(sites, url):
+def service_handler(sites, options, url):
     handler = None
 
     for i in sites:
         if i.handles(url):
-            handler = i(url)
+            handler = i(options, url)
             break
 
     return handler

@@ -22,7 +22,7 @@ class OppetArkiv(Svtplay):
         episodes = []
 
         n = 0
-        if options.all_last > 0:
+        if self.options.all_last > 0:
             sort = "tid_fallande"
         else:
             sort = "tid_stigande"
@@ -36,7 +36,7 @@ class OppetArkiv(Svtplay):
             data = data.text
             regex = re.compile(r'href="(/video/[^"]+)"')
             for match in regex.finditer(data):
-                if n == options.all_last:
+                if n == self.options.all_last:
                     break
                 episodes.append("http://www.oppetarkiv.se%s" % match.group(1))
                 n += 1
