@@ -47,7 +47,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "0.30.2016.01.10"
+__version__ = "0.30.2016.02.08"
 
 sites = [
     Aftonbladet,
@@ -200,7 +200,7 @@ def get_one_media(stream, options):
                 error.append(i)
     except Exception as e:
         if options.verbose:
-            raise e
+            raise
         else:
             log.error("svtplay-dl crashed")
             log.error("Run again and add --verbose as an argument, to get more information")
