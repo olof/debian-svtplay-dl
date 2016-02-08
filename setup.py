@@ -11,8 +11,11 @@ import svtplay_dl
 
 deps = []
 
-if sys.version_info[0] == 2 and sys.version_info[1] <= 7 and sys.version_info[1] < 9:
-    deps.append("requests[security]>=2.0.0")
+if sys.version_info[0] == 2 and sys.version_info[1] <= 7 and sys.version_info[2] < 9:
+    deps.append("requests>=2.0.0")
+    deps.append("pyOpenSSL")
+    deps.append("ndg-httpsclient")
+    deps.append("pyasn1")
 else:
     deps.append(["requests>=2.0.0"])
 
@@ -30,7 +33,7 @@ setup(
     author_email = "j@i19.se",
     description = "Command-line program to download videos from various video on demand sites",
     license = "MIT",
-    url = "https://github.com/spaam/svtplay-dl",
+    url = "https://svtplay-dl.se",
     classifiers=["Development Status :: 5 - Production/Stable",
                  "Environment :: Console",
                  "Operating System :: POSIX",

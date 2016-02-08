@@ -9,7 +9,7 @@ import copy
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.output import progressbar, progress_stream, ETA, output
-from svtplay_dl.utils import is_py2_old, is_py2, is_py3
+from svtplay_dl.utils import is_py2_old, is_py2
 from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.error import UIException
 from svtplay_dl.fetcher import VideoRetriever
@@ -25,8 +25,7 @@ if is_py2:
 
     def _chr(temp):
         return temp
-
-if is_py3:
+else:
     def _chr(temp):
         return chr(temp)
 
@@ -45,8 +44,8 @@ class LiveHDSException(HDSException):
 def hdsparse(options, res, manifest):
     streams = {}
     bootstrap = {}
-    if res.status_code == 403:
-        streams[0] = ServiceError("Can't read HDS playlist. permission denied")
+    if res.status_code == 403 or res.status_code == 404:
+        streams[0] = ServiceError("Can't read HDS playlist.")
         return streams
     xml = ET.XML(res.text)
 
@@ -69,10 +68,7 @@ def hdsparse(options, res, manifest):
     querystring = parse.query
     manifest = "%s://%s%s" % (parse.scheme, parse.netloc, parse.path)
     for i in mediaIter:
-        if len(bootstrap) == 1:
-            bootstrapid = bootstrap["0"]
-        else:
-            bootstrapid = bootstrap[i.attrib["bootstrapInfoId"]]
+        bootstrapid = bootstrap[i.attrib["bootstrapInfoId"]]
         streams[int(i.attrib["bitrate"])] = HDS(copy.copy(options), i.attrib["url"], i.attrib["bitrate"], manifest=manifest, bootstrap=bootstrapid,
                                                 metadata=i.find("{http://ns.adobe.com/f4m/1.0}metadata").text, querystring=querystring, cookies=res.cookies)
     return streams
