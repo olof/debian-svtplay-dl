@@ -1,15 +1,17 @@
 #!/usr/bin/make -f
 
 export PREFIX=/usr
-DEBIAN_VERSION := $(shell dpkg-parsechangelog -SVersion)
-export VERSION := $(shell x=$(DEBIAN_VERSION); echo $${x%-*}-debian$${x\#\#*-})
 
-# This overrides upstream's default shebang for the generated svtplay-dl
-# executable, to comform with Debian's Python policy (1.4.2).
+## If we want to manipulate the version string, this is how it's done.
+#DEBIAN_VERSION := $(shell dpkg-parsechangelog -SVersion)
+#export VERSION := $(shell x=$(DEBIAN_VERSION); echo $${x%-*}-debian$${x\#\#*-})
+
+## This overrides upstream's default shebang for the generated svtplay-dl
+## executable, to comform with Debian's Python policy (1.4.2).
 export PYTHON=/usr/bin/python
 
-# We don't want to build-depend on python2 *and* python3, so we override
-# upstream's default of running the test suite on both.
+## We don't want to build-depend on python2 *and* python3, so we override
+## upstream's default of running the test suite on both.
 export TEST_OPTS=-2
 
 %:
