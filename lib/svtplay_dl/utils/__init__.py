@@ -5,12 +5,19 @@ import sys
 import logging
 import re
 import unicodedata
+import platform
+from operator import itemgetter
 
 try:
     import HTMLParser
 except ImportError:
     # pylint: disable-msg=import-error
     import html.parser as HTMLParser
+try:
+    from requests import Session
+except ImportError:
+    print("You need to install python-requests to use this script")
+    sys.exit(3)
 
 is_py2 = (sys.version_info[0] == 2)
 is_py3 = (sys.version_info[0] == 3)
@@ -21,12 +28,6 @@ FIREFOX_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36
 
 log = logging.getLogger('svtplay_dl')
 progress_stream = sys.stderr
-
-try:
-    from requests import Session
-except ImportError:
-    print("You need to install python-requests to use this script")
-    sys.exit(3)
 
 
 class HTTP(Session):
@@ -68,19 +69,19 @@ def list_quality(videos):
     for i in data:
         log.info("%s\t%s" % (i[0], i[1].upper()))
 
+def prio_streams(streams, protocol_prio=None):
+    if protocol_prio is None:
+        protocol_prio = ["dash", "hls", "hds", "http", "rtmp"]
 
-def prio_streams(options, streams, selected):
-    prio = options.stream_prio
-    if prio is None:
-        prio = ["hls","hds", "http", "rtmp"]
-    if isinstance(prio, str):
-        prio = prio.split(",")
-    lstreams = []
-    for i in streams:
-        if int(i.bitrate) == selected:
-            lstreams.append(i)
-    return [x for (y, x) in sorted(zip(prio, lstreams))]
+    # Map score's to the reverse of the list's index values
+    proto_score = dict(zip(protocol_prio, range(len(protocol_prio), 0, -1)))
 
+    # Build a tuple (bitrate, proto_score, stream), and use it
+    # for sorting.
+    prioritized = [(s.bitrate, proto_score[s.name()], s) for
+                   s in streams if s.name() in proto_score]
+    return [x[2] for
+            x in sorted(prioritized, key=itemgetter(0,1), reverse=True)]
 
 def select_quality(options, streams):
     available = sorted(int(x.bitrate) for x in streams)
@@ -113,7 +114,14 @@ def select_quality(options, streams):
         log.error("Can't find that quality. Try one of: %s (or try --flexible-quality)", quality)
 
         sys.exit(4)
-    return prio_streams(options, streams, selected)[0]
+
+    # Extract protocol prio, in the form of "hls,hds,http,rtmp",
+    # we want it as a list
+    proto_prio = (options.stream_prio or '').split() or None
+
+    return [x for
+            x in prio_streams(streams, protocol_prio=proto_prio)
+            if x.bitrate == selected][0]
 
 
 def ensure_unicode(s):
@@ -160,6 +168,7 @@ def filenamify(title):
 
     # Replace whitespace with dot
     title = re.sub(r'\s+', '.', title)
+    title = re.sub(r'\.-\.', '-', title)
 
     return title
 
@@ -174,3 +183,29 @@ def download_thumbnail(options, url):
     fd = open(tbn, "wb")
     fd.write(data)
     fd.close()
+
+
+def which(program):
+    import os
+
+    if platform.system() == "Windows":
+        program = "{0}.exe".format(program)
+
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    fpath, fname = os.path.split(program)
+    if fpath:
+        if is_exe(program):
+            return program
+    else:
+        for path in os.environ["PATH"].split(os.pathsep):
+            path = path.strip('"')
+            exe_file = os.path.join(path, program)
+            if is_exe(exe_file):
+                return exe_file
+        if os.path.isfile(program):
+            exe_file = os.path.join(os.getcwd(), program)
+            if is_exe(exe_file):
+                return exe_file
+    return None

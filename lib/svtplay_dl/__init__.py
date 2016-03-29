@@ -14,6 +14,7 @@ from svtplay_dl.service import service_handler, Generic
 from svtplay_dl.fetcher import VideoRetriever
 from svtplay_dl.subtitle import subtitle
 from svtplay_dl.output import filename
+from svtplay_dl.postprocess import postprocess
 
 from svtplay_dl.service.aftonbladet import Aftonbladet
 from svtplay_dl.service.bambuser import Bambuser
@@ -47,7 +48,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "0.30.2016.02.08"
+__version__ = "1.0"
 
 sites = [
     Aftonbladet,
@@ -132,6 +133,7 @@ class Options(object):
         self.ssl_verify = True
         self.http_headers = None
         self.stream_prio = None
+        self.remux = False
 
 
 def get_media(url, options):
@@ -150,31 +152,35 @@ def get_media(url, options):
             sys.exit(2)
 
     if options.all_episodes:
-        if options.output and os.path.isfile(options.output):
-            log.error("Output must be a directory if used with --all-episodes")
-            sys.exit(2)
-        elif options.output and not os.path.exists(options.output):
-            try:
-                os.makedirs(options.output)
-            except OSError as e:
-                log.error("%s: %s" % (e.strerror, e.filename))
-                return
-
-        episodes = stream.find_all_episodes(options)
-        if episodes is None:
-            return
-        for idx, o in enumerate(episodes):
-            if o == url:
-                substream = stream
-            else:
-                substream = service_handler(sites, options, o)
-
-            log.info("Episode %d of %d", idx + 1, len(episodes))
-
-            # get_one_media overwrites options.output...
-            get_one_media(substream, copy.copy(options))
+        get_all_episodes(stream, options, url)
     else:
         get_one_media(stream, options)
+
+
+def get_all_episodes(stream, options, url):
+    if options.output and os.path.isfile(options.output):
+        log.error("Output must be a directory if used with --all-episodes")
+        sys.exit(2)
+    elif options.output and not os.path.exists(options.output):
+        try:
+            os.makedirs(options.output)
+        except OSError as e:
+            log.error("%s: %s" % (e.strerror, e.filename))
+            return
+
+    episodes = stream.find_all_episodes(options)
+    if episodes is None:
+        return
+    for idx, o in enumerate(episodes):
+        if o == url:
+            substream = stream
+        else:
+            substream = service_handler(sites, options, o)
+
+        log.info("Episode %d of %d", idx + 1, len(episodes))
+
+        # get_one_media overwrites options.output...
+        get_one_media(substream, copy.copy(options))
 
 
 def get_one_media(stream, options):
@@ -245,6 +251,13 @@ def get_one_media(stream, options):
                 stream.get_thumbnail(options)
             else:
                 log.warning("Can not get thumbnail when fetching to stdout")
+        post = postprocess(stream)
+        if stream.name() == "dash" and post.detect:
+            post.merge()
+        if stream.name() == "dash" and not post.detect and stream.finished:
+            log.warning("Cant find ffmpeg/avconv. audio and video is in seperate files. if you dont want this use -P hls or hds")
+        if options.remux:
+            post.remux()
 
 
 def setup_log(silent, verbose=False):
@@ -325,8 +338,10 @@ def main():
                       help="Don't attempt to verify SSL certificates.")
     parser.add_option("--http-header", dest="http_headers", default=None, metavar="header1=value;header2=value2",
                       help="A header to add to each HTTP request.")
-    parser.add_option("--stream-priority", dest="stream_prio", default=None, metavar="hls,hds,http,rtmp",
+    parser.add_option("--stream-priority", dest="stream_prio", default=None, metavar="dash,hls,hds,http,rtmp",
                       help="If two streams have the same quality, choose the one you prefer")
+    parser.add_option("--remux", dest="remux", default=False, action="store_true",
+                      help="Remux from one container to mp4 using ffmpeg or avconv")
     (options, args) = parser.parse_args()
     if not args:
         parser.print_help()
@@ -378,4 +393,5 @@ def mergeParserOption(options, parser):
     options.ssl_verify = parser.ssl_verify
     options.http_headers = parser.http_headers
     options.stream_prio = parser.stream_prio
+    options.remux = parser.remux
     return options

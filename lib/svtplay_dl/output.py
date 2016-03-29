@@ -105,7 +105,7 @@ def progressbar(total, pos, msg=""):
     Of course, the ETA part should be supplied be the calling
     function.
     """
-    width = get_terminal_size()[0] - 35
+    width = get_terminal_size()[0] - 40
     rel_pos = int(float(pos)/total*width)
     bar = ''.join(["=" * rel_pos, "." * (width - rel_pos)])
 
@@ -192,7 +192,7 @@ def findexpisode(directory, service, name):
                 if extention == "srt":
                     if name.find(service) and match.group(1) == videoid and match.group(2) == extention:
                         return True
-                elif match.group(2) != "srt":
+                elif match.group(2) != "srt" and match.group(2) != "m4a":
                     if name.find(service) and match.group(1) == videoid:
                         return True
 

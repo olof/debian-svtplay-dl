@@ -56,10 +56,22 @@ To install it, run
 
 ::
 
+    # as root:
+    python setup.py install
+
+    # or the old method
     make
 
     # as root:
     make install
+
+After install
+~~~~~~~~~~~~~
+::
+
+    svtplay-dl [options] URL
+
+You need to install `ffmpeg`_ or `avconv`_  if you want to remux files to .mp4
 
 Support
 -------
@@ -121,6 +133,8 @@ This project is licensed under `The MIT License (MIT)`_.
 .. _RTMPDump: http://rtmpdump.mplayerhq.hu/
 .. _PyCrypto: https://www.dlitz.net/software/pycrypto/
 .. _Requests: http://www.python-requests.org/
+.. _ffmpeg: https://ffmpeg.org
+.. _avconv: https://libav.org
 .. _on github: https://github.com/spaam/svtplay-dl/issues
 .. _The MIT License (MIT): LICENSE
 
