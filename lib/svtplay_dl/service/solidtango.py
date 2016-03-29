@@ -2,14 +2,17 @@
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
 import re
+import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service
 from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.error import ServiceError
+from svtplay_dl.utils.urllib import urlparse
 
 
 class Solidtango(Service):
-    supported_domains = ['skkplay.se', 'skkplay.solidtango.com']
+    supported_domains_re = [r'^([^.]+\.)*solidtango.com']
+    supported_domains = ['mm-resource-service.herokuapp.com', 'solidtango.com']
 
     def get(self):
         data = self.get_urldata()
@@ -17,16 +20,33 @@ class Solidtango(Service):
         if self.exclude(self.options):
             yield ServiceError("Excluding video")
             return
-
+        match = re.search('src="(http://mm-resource-service.herokuapp.com[^"]*)"', data)
+        if match:
+            data = self.http.request("get", match.group(1)).text
+            match = re.search('src="(https://[^"]+solidtango[^"]+)" ', data)
+            if match:
+                data = self.http.request("get", match.group(1)).text
         match = re.search(r'<title>(http[^<]+)</title>', data)
         if match:
             data = self.http.request("get", match.group(1)).text
 
+        match = re.search('is_livestream: true', data)
+        if match:
+            self.options.live = True
         match = re.search('html5_source: "([^"]+)"', data)
         if match:
             streams = hlsparse(self.options, self.http.request("get", match.group(1)), match.group(1))
             for n in list(streams.keys()):
                 yield streams[n]
         else:
-            yield ServiceError("Can't find video info. if there is a video on the page. its a bug.")
-            return
+            parse = urlparse(self.url)
+            url2 = "https://%s/api/v1/play/%s.xml" % (parse.netloc, parse.path[parse.path.rfind("/")+1:])
+            data = self.http.request("get", url2)
+            if data.status_code != 200:
+                yield ServiceError("Can't find video info. if there is a video on the page. its a bug.")
+                return
+            xml = ET.XML(data.text)
+            elements = xml.findall(".//manifest")
+            streams = hlsparse(self.options, self.http.request("get", elements[0].text), elements[0].text)
+            for n in list(streams.keys()):
+                yield streams[n]

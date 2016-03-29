@@ -63,6 +63,9 @@ class Tv4play(Service, OpenGraphThumbMixin):
         if xml.find("drmProtected").text == "true":
             yield ServiceError("We cant download DRM protected content from this site.")
             return
+        if xml.find("playbackStatus").text == "NOT_STARTED":
+            yield ServiceError("Can't download something that is not started")
+            return
 
         if self.options.output_auto:
             directory = os.path.dirname(self.options.output)
@@ -148,8 +151,6 @@ class Tv4play(Service, OpenGraphThumbMixin):
         else:
             show = parse.path[parse.path.find("/", 1)+1:]
         if not re.search("%", show):
-            if is_py2:
-                show = show.encode("utf-8")
             show = quote_plus(show)
         return show
 
@@ -199,12 +200,15 @@ class Tv4play(Service, OpenGraphThumbMixin):
         if not auth_token:
             return ServiceError("Can't find authenticity_token needed for user / password")
         url = "https://www.tv4play.se/session"
-        postdata = {"user_name" : username, "password": password, "authenticity_token":auth_token.group(2), "https": ""}
+        postdata = {"username" : username, "password": password, "authenticity_token":auth_token.group(2), "https": ""}
         data = self.http.request("post", url, data=postdata, cookies=self.cookies)
         self.cookies = data.cookies
         fail = re.search("<p class='failed-login'>([^<]+)</p>", data.text)
         if fail:
-            return ServiceError(fail.group(1))
+            message = fail.group(1)
+            if is_py2:
+                message = message.encode("utf8")
+            return ServiceError(message)
         return True
 
 
