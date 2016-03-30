@@ -1,3 +1,11 @@
+svtplay-dl (1.0-1) unstable; urgency=medium
+
+  * Imported Upstream version 1.0
+  * Depend on ffmpeg/libav because of dash/remux support
+  * Bump Standards-Version to 3.9.7
+
+ -- Olof Johansson <olof@ethup.se>  Wed, 30 Mar 2016 23:24:30 +0200
+
 svtplay-dl (0.30.2016.02.08-1) unstable; urgency=medium
 
   * Imported Upstream version 0.30.2016.02.08
