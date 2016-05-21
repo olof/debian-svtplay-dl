@@ -1,3 +1,13 @@
+svtplay-dl (1.1-1) unstable; urgency=medium
+
+  * Imported Upstream version 1.1
+  * debian/rules: fix reproducibility with varying locale
+  * make: Adjust patch to not include git info in --version
+  * debian/rules: Disable git describe output in --version string
+  * debian/control: Bump Standards-Version to 3.9.8
+
+ -- Olof Johansson <olof@ethup.se>  Sun, 22 May 2016 01:52:37 +0200
+
 svtplay-dl (1.0-1) unstable; urgency=medium
 
   * Imported Upstream version 1.0
