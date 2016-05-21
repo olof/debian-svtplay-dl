@@ -1,6 +1,7 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
-from __future__ import absolute_import
+from __future__ import absolute_import, unicode_literals
+
 import sys
 import os
 import logging
@@ -9,7 +10,7 @@ from optparse import OptionParser
 
 from svtplay_dl.error import UIException
 from svtplay_dl.log import log
-from svtplay_dl.utils import select_quality, list_quality
+from svtplay_dl.utils import select_quality, list_quality, is_py2, ensure_unicode
 from svtplay_dl.service import service_handler, Generic
 from svtplay_dl.fetcher import VideoRetriever
 from svtplay_dl.subtitle import subtitle
@@ -48,7 +49,7 @@ from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "1.0"
+__version__ = "1.1"
 
 sites = [
     Aftonbladet,
@@ -134,12 +135,16 @@ class Options(object):
         self.http_headers = None
         self.stream_prio = None
         self.remux = False
+        self.get_all_subtitles = False
+        self.silent_semi = False
 
 
 def get_media(url, options):
     if "http" not in url[:4]:
         url = "http://%s" % url
 
+    if options.silent_semi:
+        options.silent = True
     stream = service_handler(sites, options, url)
     if not stream:
         generic = Generic(options, url)
@@ -150,6 +155,9 @@ def get_media(url, options):
         if not stream:
             log.error("That site is not supported. Make a ticket or send a message")
             sys.exit(2)
+
+    if is_py2:
+        url = ensure_unicode(url)
 
     if options.all_episodes:
         get_all_episodes(stream, options, url)
@@ -165,7 +173,7 @@ def get_all_episodes(stream, options, url):
         try:
             os.makedirs(options.output)
         except OSError as e:
-            log.error("%s: %s" % (e.strerror, e.filename))
+            log.error("%s: %s", e.strerror, e.filename)
             return
 
     episodes = stream.find_all_episodes(options)
@@ -175,7 +183,7 @@ def get_all_episodes(stream, options, url):
         if o == url:
             substream = stream
         else:
-            substream = service_handler(sites, options, o)
+            substream = service_handler(sites, copy.copy(options), o)
 
         log.info("Episode %d of %d", idx + 1, len(episodes))
 
@@ -218,9 +226,24 @@ def get_one_media(stream, options):
         log.info("No subtitles available")
         return
 
-    if options.subtitle and options.output != "-":
+    if options.subtitle and options.get_url:
         if subs:
-            subs[0].download()
+            if options.get_all_subtitles:
+                for sub in subs:
+                    print(sub.url)
+            else:
+                print(subs[0].url)
+        if options.force_subtitle: 
+            return
+        
+    if options.subtitle and options.output != "-" and not options.get_url:
+        if subs:
+            if options.get_all_subtitles:
+                for sub in subs:
+                    sub.download()
+            else: 
+                subs[0].download()
+
         if options.force_subtitle:
             return
 
@@ -231,13 +254,13 @@ def get_one_media(stream, options):
         if options.list_quality:
             list_quality(videos)
             return
-        stream = select_quality(options, videos)
-        log.info("Selected to download %s, bitrate: %s",
-                 stream.name(), stream.bitrate)
-        if options.get_url:
-            print(stream.url)
-            return
         try:
+            stream = select_quality(options, videos)
+            log.info("Selected to download %s, bitrate: %s",
+                     stream.name(), stream.bitrate)
+            if options.get_url:
+                print(stream.url)
+                return
             stream.download()
         except UIException as e:
             if options.verbose:
@@ -258,13 +281,16 @@ def get_one_media(stream, options):
             log.warning("Cant find ffmpeg/avconv. audio and video is in seperate files. if you dont want this use -P hls or hds")
         if options.remux:
             post.remux()
+        if options.silent_semi and stream.finished:
+            log.log(25, "Download of %s was completed" % stream.options.output)
 
 
 def setup_log(silent, verbose=False):
+    logging.addLevelName(25, "INFO")
     fmt = logging.Formatter('%(levelname)s: %(message)s')
     if silent:
         stream = sys.stderr
-        level = logging.WARNING
+        level = 25
     elif verbose:
         stream = sys.stderr
         level = logging.DEBUG
@@ -298,6 +324,8 @@ def main():
     parser.add_option("-s", "--silent",
                       action="store_true", dest="silent", default=False,
                       help="be less verbose")
+    parser.add_option("--silent-semi", action="store_true",
+                      dest="silent_semi", default=False, help="only show a message when the file is downloaded")
     parser.add_option("-v", "--verbose",
                       action="store_true", dest="verbose", default=False,
                       help="explain what is going on")
@@ -315,6 +343,8 @@ def main():
                       action="store_true", help="download only subtitle if its used with -S")
     parser.add_option("--require-subtitle", dest="require_subtitle", default=False,
                       action="store_true", help="download only if a subtitle is available")
+    parser.add_option("--all-subtitles", dest="get_all_subtitles", default=False, action="store_true",
+                      help="Download all available subtitles for the video")
     parser.add_option("-u", "--username", default=None,
                       help="username")
     parser.add_option("-p", "--password", default=None,
@@ -328,7 +358,7 @@ def main():
     parser.add_option("--all-last", dest="all_last", default=-1, type=int,
                       metavar="NN", help="get last NN episodes instead of all episodes")
     parser.add_option("-P", "--preferred", default=None,
-                      metavar="preferred", help="preferred download method (hls, hds, http or rtmp")
+                      metavar="preferred", help="preferred download method (dash, hls, hds, http or rtmp)")
     parser.add_option("--exclude", dest="exclude", default=None,
                       metavar="WORD1,WORD2,...", help="exclude videos with the WORD(s) in the filename. comma separated.")
     parser.add_option("-g", "--get-url",
@@ -355,6 +385,8 @@ def main():
     if options.require_subtitle:
         options.subtitle = True
     options = mergeParserOption(Options(), options)
+    if options.silent_semi:
+        options.silent = True
     setup_log(options.silent, options.verbose)
 
     if options.flexibleq and not options.quality:
@@ -379,6 +411,7 @@ def mergeParserOption(options, parser):
     options.flexibleq = parser.flexibleq
     options.list_quality = parser.list_quality
     options.subtitle = parser.subtitle
+    options.silent_semi = parser.silent_semi
     options.username = parser.username
     options.password = parser.password
     options.thumbnail = parser.thumbnail
@@ -394,4 +427,5 @@ def mergeParserOption(options, parser):
     options.http_headers = parser.http_headers
     options.stream_prio = parser.stream_prio
     options.remux = parser.remux
+    options.get_all_subtitles = parser.get_all_subtitles
     return options
