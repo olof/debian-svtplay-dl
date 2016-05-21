@@ -12,6 +12,7 @@ from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.log import log
 from svtplay_dl.error import ServiceError
 from svtplay_dl.subtitle import subtitle
+from svtplay_dl.utils import filenamify
 
 
 class Urplay(Service, OpenGraphThumbMixin):
@@ -31,7 +32,12 @@ class Urplay(Service, OpenGraphThumbMixin):
         data = match.group(1)
         jsondata = json.loads(data)
         if len(jsondata["subtitles"]) > 0:
-            yield subtitle(copy.copy(self.options), "tt", jsondata["subtitles"][0]["file"].split(",")[0])
+            for sub in jsondata["subtitles"]:
+                if "label" in sub:
+                    if self.options.get_all_subtitles:
+                        yield subtitle(copy.copy(self.options), "tt", sub["file"].split(",")[0], "-" + filenamify(sub["label"]))
+                    else:
+                        yield subtitle(copy.copy(self.options), "tt", sub["file"].split(",")[0])
         if "streamer" in jsondata["streaming_config"]:
             basedomain = jsondata["streaming_config"]["streamer"]["redirect"]
         else:
@@ -57,6 +63,10 @@ class Urplay(Service, OpenGraphThumbMixin):
         res = []
         for relurl in re.findall(r'<a class="puff tv video"\s+title="[^"]*"\s+href="([^"]*)"',
                                  self.get_urldata()):
+            res.append(urljoin(self.url, relurl.replace("&amp;", "&")))
+
+        for relurl in re.findall(r'<a class="card program"\s+href="([^"]*)"',
+                                  self.get_urldata()):
             res.append(urljoin(self.url, relurl.replace("&amp;", "&")))
 
         if options.all_last != -1:

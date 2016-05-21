@@ -35,7 +35,7 @@ class Tv4play(Service, OpenGraphThumbMixin):
                 yield work
                 return
 
-        url = "http://premium.tv4play.se/api/web/asset/%s/play" % vid
+        url = "http://prima.tv4play.se/api/web/asset/%s/play" % vid
         data = self.http.request("get", url, cookies=self.cookies)
         if data.status_code == 401:
             xml = ET.XML(data.content)
@@ -101,7 +101,7 @@ class Tv4play(Service, OpenGraphThumbMixin):
             elif i.find("mediaFormat").text == "smi":
                 yield subtitle(copy.copy(self.options), "smi", i.find("url").text)
 
-        url = "http://premium.tv4play.se/api/web/asset/%s/play?protocol=hls" % vid
+        url = "https://prima.tv4play.se/api/web/asset/%s/play?protocol=hls" % vid
         data = self.http.request("get", url, cookies=self.cookies).content
         xml = ET.XML(data)
         ss = xml.find("items")
@@ -151,6 +151,8 @@ class Tv4play(Service, OpenGraphThumbMixin):
         else:
             show = parse.path[parse.path.find("/", 1)+1:]
         if not re.search("%", show):
+            if is_py2 and isinstance(show, unicode):
+                show = show.encode("utf-8")
             show = quote_plus(show)
         return show
 
@@ -160,6 +162,13 @@ class Tv4play(Service, OpenGraphThumbMixin):
             if vid == i["id"]:
                 return i["title"]
         return self._get_clip_info(vid)
+
+    def _getdays(self, data, text):
+        try:
+            days = int(data["availability"][text])
+        except (ValueError, TypeError):
+            days = 999
+        return days
 
     def find_all_episodes(self, options):
         premium = False
@@ -179,10 +188,10 @@ class Tv4play(Service, OpenGraphThumbMixin):
             else:
                 text = "availability_group_free"
 
-            try:
-                days = int(i["availability"][text])
-            except (ValueError, TypeError):
-                days = 999
+            days = self._getdays(i, text)
+            if premium and days == 0:
+                days = self._getdays(i, "availability_group_free")
+
             if days > 0:
                 video_id = i["id"]
                 url = "http://www.tv4play.se/program/%s?video_id=%s" % (
@@ -199,16 +208,17 @@ class Tv4play(Service, OpenGraphThumbMixin):
         auth_token = re.search('name="authenticity_token" ([a-z]+="[^"]+" )?value="([^"]+)"', data.text)
         if not auth_token:
             return ServiceError("Can't find authenticity_token needed for user / password")
-        url = "https://www.tv4play.se/session"
-        postdata = {"username" : username, "password": password, "authenticity_token":auth_token.group(2), "https": ""}
+        url = "https://account.services.tv4play.se/authenticate"
+        postdata = {"username" : username, "password": password, "authenticity_token":auth_token.group(2), "https": "", "client": "web"}
         data = self.http.request("post", url, data=postdata, cookies=self.cookies)
-        self.cookies = data.cookies
-        fail = re.search("<p class='failed-login'>([^<]+)</p>", data.text)
-        if fail:
-            message = fail.group(1)
+        res = data.json()
+        if "errors" in res:
+            message = res["errors"][0]
             if is_py2:
                 message = message.encode("utf8")
             return ServiceError(message)
+        self.cookies={"JSESSIONID": res["vimond_session_token"]}
+
         return True
 
 

@@ -25,6 +25,11 @@ svtplay-dl is available in Debian in Jessie and later and Ubuntu in
 
 … as root.
 
+Windows
+~~~~~~~
+
+You can download windows binaries from `svtplay-dl.se`_
+
 Other systems with python
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -51,6 +56,7 @@ you don’t have them, some features will not be working.
 -  `RTMPDump`_ 2.4 or higher to download RTMP streams.
 -  `PyCrypto`_ to download encrypted HLS streams
 -  `Requests`_
+- `ffmpeg`_ or `avconv`_ for postprocessing and/or for DASH streams
 
 To install it, run
 
@@ -71,14 +77,9 @@ After install
 
     svtplay-dl [options] URL
 
-You need to install `ffmpeg`_ or `avconv`_  if you want to remux files to .mp4
-
-Support
--------
 
 If you encounter any bugs or problems, don’t hesitate to open an issue
-`on github`_. Or why not join the ``#svtplay-dl`` IRC channel on
-Freenode?
+`on github`_. Or why not join the ``#svtplay-dl`` IRC channel on Freenode?
 
 Supported services
 ------------------
@@ -128,6 +129,7 @@ License
 -------
 
 This project is licensed under `The MIT License (MIT)`_.
+Homepage: `svtplay-dl.se`_
 
 .. _Homebrew: http://brew.sh/
 .. _RTMPDump: http://rtmpdump.mplayerhq.hu/
@@ -136,5 +138,6 @@ This project is licensed under `The MIT License (MIT)`_.
 .. _ffmpeg: https://ffmpeg.org
 .. _avconv: https://libav.org
 .. _on github: https://github.com/spaam/svtplay-dl/issues
+.. _svtplay-dl.se: https://svtplay-dl.se
 .. _The MIT License (MIT): LICENSE
 

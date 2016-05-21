@@ -8,7 +8,6 @@ import copy
 
 from svtplay_dl.output import progressbar, progress_stream, ETA, output
 from svtplay_dl.log import log
-from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.error import UIException, ServiceError
 from svtplay_dl.fetcher import VideoRetriever
 
@@ -103,7 +102,8 @@ class HLS(VideoRetriever):
 
         if self.options.output != "-":
             file_d.close()
-            progress_stream.write('\n')
+            if not self.options.silent:
+                progress_stream.write('\n')
             self.finished = True
 
 
