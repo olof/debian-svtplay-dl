@@ -4,7 +4,7 @@ all: svtplay-dl
         release clean_releasedir $(RELEASE_DIR)
 
 # These variables describe the latest release:
-VERSION = 1.1
+export VERSION = 1.1
 LATEST_RELEASE = $(VERSION)
 
 # If we build a new release, this is what it will be called:
@@ -25,7 +25,7 @@ MANFILE = svtplay-dl.1$(MANFILE_EXT)
 # to remove references to perl.. :-)
 POD2MAN ?= pod2man --section 1 --utf8 \
                    --center "svtplay-dl manual" \
-                   --release "svtplay-dl $(GENERATION)" \
+                   --release "svtplay-dl $(VERSION)" \
                    --date "$(LATEST_RELEASE_DATE)"
 
 PYTHON ?= /usr/bin/env python

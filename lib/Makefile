@@ -19,8 +19,9 @@ export PYFILES = $(sort $(addsuffix /*.py,$(subst .,/,$(PACKAGES))))
 
 PYTHON ?= /usr/bin/env python
 
-GIT_VERSION := $(shell git describe 2>/dev/null || echo $(LATEST_RELEASE)-unknown)
-VERSION ?= $(GIT_VERSION)
+# This is the string that ends up in the program's --version output
+# Disable this behavior by setting the variable NO_GIT_VERSION=y.
+VERSION$(NO_GIT_VERSION) = $(shell git describe 2>/dev/null || echo $(LATEST_RELEASE)-unknown)
 
 svtplay-dl: $(PYFILES)
 	@# Verify that there's no .build already \
