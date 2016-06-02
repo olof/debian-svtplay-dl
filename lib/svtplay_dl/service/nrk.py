@@ -19,7 +19,7 @@ class Nrk(Service, OpenGraphThumbMixin):
     def get(self):
         data = self.get_urldata()
 
-        if self.exclude(self.options):
+        if self.exclude():
             yield ServiceError("Excluding video")
             return
 
@@ -30,9 +30,6 @@ class Nrk(Service, OpenGraphThumbMixin):
             suburl = "%s://%s%s" % (parse.scheme, parse.netloc, match.group(1))
             yield subtitle(copy.copy(self.options), "tt", suburl)
 
-        if self.options.force_subtitle:
-            return
-
         match = re.search(r'data-media="(.*manifest.f4m)"', self.get_urldata())
         if match:
             manifest_url = match.group(1)
@@ -41,14 +38,24 @@ class Nrk(Service, OpenGraphThumbMixin):
             if match is None:
                 match = re.search(r'video-id="([^"]+)"', self.get_urldata())
                 if match is None:
-                    yield ServiceError("Can't find video id.")
-                    return
+                    match = re.search("<meta name=\"programid\".*?content=\"([^\"]*)\"", self.get_urldata())
+                    if match is None:
+                        yield ServiceError("Can't find video id.")
+                        return
             vid = match.group(1)
-            dataurl = "http://v8.psapi.nrk.no/mediaelement/%s" % vid
+            dataurl = "https://psapi-we.nrk.no/mediaelement/%s" % vid
             data = self.http.request("get", dataurl).text
             data = json.loads(data)
             manifest_url = data["mediaUrl"]
             self.options.live = data["isLive"]
+            if manifest_url is None:
+                if data["messageType"] == "ProgramIsGeoBlocked":
+                    yield ServiceError("Can't fetch the video because of geoblocked")
+                    return
+
+        if manifest_url is None:
+            yield ServiceError("No videos available")
+            return
 
         hlsurl = manifest_url.replace("/z/", "/i/").replace("manifest.f4m", "master.m3u8")
         data = self.http.request("get", hlsurl)

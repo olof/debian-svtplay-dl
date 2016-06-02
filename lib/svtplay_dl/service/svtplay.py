@@ -60,7 +60,7 @@ class Svtplay(Service, OpenGraphThumbMixin):
             self.options.service = "svtplay"
             self.options.output = self.outputfilename(dataj, self.options.output, ensure_unicode(self.get_urldata()))
 
-        if self.exclude(self.options):
+        if self.exclude():
             yield ServiceError("Excluding video")
             return
 
@@ -75,9 +75,6 @@ class Svtplay(Service, OpenGraphThumbMixin):
                 pass
             if suburl and len(suburl) > 0:
                 yield subtitle(copy.copy(self.options), "wrst", suburl)
-
-        if self.options.force_subtitle:
-            return
 
         if len(data["videoReferences"]) == 0:
             yield ServiceError("Media doesn't have any associated videos (yet?)")

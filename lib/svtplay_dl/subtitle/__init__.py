@@ -104,7 +104,11 @@ class subtitle(object):
         return subs
 
     def sami(self, subdata):
-        tree = ET.XML(subdata.text.encode("utf8"))
+        text = subdata.text
+        if is_py2:
+            text = text.encode("utf8")
+        text = re.sub(r'&', '&amp;', text)
+        tree = ET.fromstring(text)
         subt = tree.find("Font")
         subs = ""
         n = 0
@@ -122,6 +126,7 @@ class subtitle(object):
 
         if is_py2:
             subs = subs.encode('utf8')
+        subs = re.sub('&amp;', r'&', subs)
         return subs
 
     def smi(self, subdata):
@@ -229,7 +234,7 @@ def timestr(msec):
     minutes = int(sec / 60)
     sec -= minutes * 60
 
-    output = "%02d:%02d:%05.2f" % (hours, minutes, sec)
+    output = "%02d:%02d:%06.3f" % (hours, minutes, sec)
     return output.replace(".", ",")
 
 
