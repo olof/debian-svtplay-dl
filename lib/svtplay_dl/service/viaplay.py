@@ -26,7 +26,7 @@ class Viaplay(Service, OpenGraphThumbMixin):
         'tv3play.se', 'tv6play.se', 'tv8play.se', 'tv10play.se',
         'tv3play.no', 'tv3play.dk', 'tv6play.no', 'viasat4play.no',
         'tv3play.ee', 'tv3play.lv', 'tv3play.lt', 'tvplay.lv', 'viagame.com',
-        'juicyplay.se']
+        'juicyplay.se', 'viafree.se', 'viafree.dk', 'viafree.no']
 
     def _get_video_id(self):
         """
@@ -42,6 +42,35 @@ class Viaplay(Service, OpenGraphThumbMixin):
         match = re.search(r'data-videoid="([0-9]+)', html_data)
         if match:
             return match.group(1)
+
+        clips = False
+        match = re.search('params":({.*}),"query', self.get_urldata())
+        if match:
+            jansson = json.loads(match.group(1))
+            season = jansson["seasonNumberOrVideoId"]
+            if "videoIdOrEpisodeNumber" in jansson:
+                videp = jansson["videoIdOrEpisodeNumber"]
+                match = re.search('(episode|avsnitt)-(\d+)', videp)
+                if match:
+                    episodenr = match.group(2)
+                else:
+                    episodenr = videp
+                    clips = True
+            else:
+                episodenr = season
+
+            if clips:
+                return episodenr
+            else:
+                match = re.search('"ContentPageProgramStore":({.*}),"ApplicationStore', self.get_urldata())
+                if match:
+                    janson = json.loads(match.group(1))
+                    for i in janson["format"]["videos"].keys():
+                        for n in janson["format"]["videos"][i]["program"]:
+                            if str(n["episodeNumber"]) and int(episodenr) == n["episodeNumber"]:
+                                return n["id"]
+                            elif n["id"] == episodenr:
+                                return episodenr
 
         parse = urlparse(self.url)
         match = re.search(r'/\w+/(\d+)', parse.path)
@@ -126,20 +155,23 @@ class Viaplay(Service, OpenGraphThumbMixin):
                     yield streams[n]
 
     def find_all_episodes(self, options):
-        format_id = re.search(r'data-format-id="(\d+)"', self.get_urldata())
-        if not format_id:
-            log.error("Can't find video info for all episodes")
-            return
-        data = self.http.request("get", "http://playapi.mtgx.tv/v1/sections?sections=videos.one,seasons.videolist&format=%s" % format_id.group(1)).text
-        jsondata = json.loads(data)
-        videos = jsondata["_embedded"]["sections"][1]["_embedded"]["seasons"][0]["_embedded"]["episodelist"]["_embedded"]["videos"]
+        videos = []
+        match = re.search('"ContentPageProgramStore":({.*}),"ApplicationStore', self.get_urldata())
+        if match:
+            janson = json.loads(match.group(1))
+            seasons = []
+            for i in janson["format"]["seasons"]:
+                seasons.append(i["seasonNumber"])
+            for i in seasons:
+                for n in janson["format"]["videos"][str(i)]["program"]:
+                    videos.append(n["sharingUrl"])
 
         n = 0
         episodes = []
         for i in videos:
             if n == options.all_last:
                 break
-            episodes.append(i["sharing"]["url"])
+            episodes.append(i)
             n += 1
         return episodes
 

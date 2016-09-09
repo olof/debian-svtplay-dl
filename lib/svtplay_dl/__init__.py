@@ -27,6 +27,8 @@ from svtplay_dl.service.dr import Dr
 from svtplay_dl.service.efn import Efn
 from svtplay_dl.service.expressen import Expressen
 from svtplay_dl.service.facebook import Facebook
+from svtplay_dl.service.filmarkivet import Filmarkivet
+from svtplay_dl.service.flowonline import Flowonline
 from svtplay_dl.service.hbo import Hbo
 from svtplay_dl.service.twitch import Twitch
 from svtplay_dl.service.lemonwhale import Lemonwhale
@@ -35,8 +37,10 @@ from svtplay_dl.service.mtvservices import Mtvservices
 from svtplay_dl.service.nrk import Nrk
 from svtplay_dl.service.oppetarkiv import OppetArkiv
 from svtplay_dl.service.picsearch import Picsearch
+from svtplay_dl.service.pokemon import Pokemon
 from svtplay_dl.service.qbrick import Qbrick
 from svtplay_dl.service.radioplay import Radioplay
+from svtplay_dl.service.riksdagen import Riksdagen
 from svtplay_dl.service.ruv import Ruv
 from svtplay_dl.service.raw import Raw
 from svtplay_dl.service.solidtango import Solidtango
@@ -46,10 +50,11 @@ from svtplay_dl.service.tv4play import Tv4play
 from svtplay_dl.service.urplay import Urplay
 from svtplay_dl.service.vg import Vg
 from svtplay_dl.service.viaplay import Viaplay
+from svtplay_dl.service.viasatsport import Viasatsport
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "1.2"
+__version__ = "1.3"
 
 sites = [
     Aftonbladet,
@@ -62,6 +67,8 @@ sites = [
     Efn,
     Expressen,
     Facebook,
+    Filmarkivet,
+    Flowonline,
     Hbo,
     Twitch,
     Lemonwhale,
@@ -70,6 +77,7 @@ sites = [
     Nrk,
     Qbrick,
     Picsearch,
+    Pokemon,
     Ruv,
     Radioplay,
     Solidtango,
@@ -79,9 +87,12 @@ sites = [
     Tv4play,
     Urplay,
     Viaplay,
+    Viasatsport,
     Vimeo,
     Vg,
-    Youplay]
+    Youplay,
+    Riksdagen,
+    Raw]
 
 
 class Options(object):
@@ -122,8 +133,12 @@ class Options(object):
         self.thumbnail = False
         self.all_episodes = False
         self.all_last = -1
+        self.merge_subtitle = False
         self.force_subtitle = False
         self.require_subtitle = False
+        self.get_all_subtitles = False
+        self.get_raw_subtitles = False
+        self.convert_subtitle_colors = False
         self.preferred = None
         self.verbose = False
         self.output_auto = False
@@ -135,9 +150,7 @@ class Options(object):
         self.http_headers = None
         self.stream_prio = None
         self.remux = False
-        self.get_all_subtitles = False
         self.silent_semi = False
-
 
 def get_media(url, options):
     if "http" not in url[:4]:
@@ -196,8 +209,16 @@ def get_one_media(stream, options):
     if not filename(stream):
         return
 
+    if options.merge_subtitle:
+        from svtplay_dl.utils import which
+        if not which('ffmpeg'):
+            log.error("--merge-subtitle needs ffmpeg. Please install ffmpeg.")
+            log.info("https://ffmpeg.org/download.html")
+            sys.exit(2)
+
     videos = []
     subs = []
+    subfixes = []
     error = []
     streams = stream.get()
     try:
@@ -236,20 +257,30 @@ def get_one_media(stream, options):
                 print(subs[0].url)
         if options.force_subtitle: 
             return
-        
-    if options.subtitle and options.output != "-" and not options.get_url:
+
+    def options_subs_dl(subfixes):
         if subs:
             if options.get_all_subtitles:
                 for sub in subs:
                     sub.download()
+                    if options.merge_subtitle:
+                        if sub.subfix:
+                            subfixes += [sub.subfix]
+                        else:
+                            options.get_all_subtitles = False
             else: 
                 subs[0].download()
+        elif options.merge_subtitle:
+            options.merge_subtitle = False
 
+    if options.subtitle and options.output != "-" and not options.get_url:
+        options_subs_dl(subfixes)
         if options.force_subtitle:
             return
 
-    if options.force_subtitle:
-        return
+    if options.merge_subtitle and not options.subtitle:
+        options_subs_dl(subfixes)
+
 
     if len(videos) == 0:
         for exc in error:
@@ -260,11 +291,11 @@ def get_one_media(stream, options):
             return
         try:
             stream = select_quality(options, videos)
-            log.info("Selected to download %s, bitrate: %s",
-                     stream.name(), stream.bitrate)
             if options.get_url:
                 print(stream.url)
                 return
+            log.info("Selected to download %s, bitrate: %s",
+                     stream.name(), stream.bitrate)
             stream.download()
         except UIException as e:
             if options.verbose:
@@ -278,7 +309,7 @@ def get_one_media(stream, options):
                 stream.get_thumbnail(options)
             else:
                 log.warning("Can not get thumbnail when fetching to stdout")
-        post = postprocess(stream)
+        post = postprocess(stream, options, subfixes)
         if stream.name() == "dash" and post.detect:
             post.merge()
         if stream.name() == "dash" and not post.detect and stream.finished:
@@ -315,7 +346,7 @@ def main():
     usage = "Usage: %prog [options] url"
     parser = OptionParser(usage=usage, version=__version__)
     parser.add_option("-o", "--output",
-                      metavar="OUTPUT", help="outputs to the given filename")
+                      metavar="OUTPUT", help="outputs to the given filename or folder")
     parser.add_option("-f", "--force",
                       action="store_true", dest="force", default=False,
                       help="overwrite if file exists already")
@@ -334,7 +365,7 @@ def main():
                       action="store_true", dest="verbose", default=False,
                       help="explain what is going on")
     parser.add_option("-q", "--quality", default=0,
-                      metavar="quality", help="choose what format to download based on bitrate / video resolution."
+                      metavar="quality", help="choose what format to download based on bitrate / video resolution. "
                                               "it will download the best format by default")
     parser.add_option("-Q", "--flexible-quality", default=0,
                       metavar="amount", dest="flexibleq", help="allow given quality (as above) to differ by an amount")
@@ -343,12 +374,18 @@ def main():
     parser.add_option("-S", "--subtitle",
                       action="store_true", dest="subtitle", default=False,
                       help="download subtitle from the site if available")
+    parser.add_option("-M", "--merge-subtitle", action="store_true", dest="merge_subtitle",
+                      default=False, help="merge subtitle with video/audio file with corresponding ISO639-3 language code. use with -S for external also.")
     parser.add_option("--force-subtitle", dest="force_subtitle", default=False,
                       action="store_true", help="download only subtitle if its used with -S")
     parser.add_option("--require-subtitle", dest="require_subtitle", default=False,
                       action="store_true", help="download only if a subtitle is available")
     parser.add_option("--all-subtitles", dest="get_all_subtitles", default=False, action="store_true",
                       help="Download all available subtitles for the video")
+    parser.add_option("--raw-subtitles", dest="get_raw_subtitles", default=False, action="store_true",
+                      help="also download the subtitles in their native format")
+    parser.add_option("--convert-subtitle-colors", dest="convert_subtitle_colors", default=False, action="store_true",
+                        help="converts the color information in subtitles, to <font color=""> tags")
     parser.add_option("-u", "--username", default=None,
                       help="username")
     parser.add_option("-p", "--password", default=None,
@@ -376,6 +413,7 @@ def main():
                       help="If two streams have the same quality, choose the one you prefer")
     parser.add_option("--remux", dest="remux", default=False, action="store_true",
                       help="Remux from one container to mp4 using ffmpeg or avconv")
+                      
     (options, args) = parser.parse_args()
     if not args:
         parser.print_help()
@@ -384,10 +422,13 @@ def main():
         parser.error("Incorrect number of arguments")
     if options.exclude:
         options.exclude = options.exclude.split(",")
-    if options.force_subtitle:
-        options.subtitle = True
     if options.require_subtitle:
-        options.subtitle = True
+        if options.merge_subtitle:
+            options.merge_subtitle = True
+        else:
+            options.subtitle = True
+    if options.merge_subtitle:
+        options.remux = True
     options = mergeParserOption(Options(), options)
     if options.silent_semi:
         options.silent = True
@@ -415,6 +456,7 @@ def mergeParserOption(options, parser):
     options.flexibleq = parser.flexibleq
     options.list_quality = parser.list_quality
     options.subtitle = parser.subtitle
+    options.merge_subtitle = parser.merge_subtitle
     options.silent_semi = parser.silent_semi
     options.username = parser.username
     options.password = parser.password
@@ -432,4 +474,6 @@ def mergeParserOption(options, parser):
     options.stream_prio = parser.stream_prio
     options.remux = parser.remux
     options.get_all_subtitles = parser.get_all_subtitles
+    options.get_raw_subtitles = parser.get_raw_subtitles
+    options.convert_subtitle_colors = parser.convert_subtitle_colors
     return options

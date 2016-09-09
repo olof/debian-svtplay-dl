@@ -5,6 +5,7 @@ import re
 import os
 import xml.etree.ElementTree as ET
 import copy
+import json
 import hashlib
 
 from svtplay_dl.log import log
@@ -149,17 +150,68 @@ class Svtplay(Service, OpenGraphThumbMixin):
 
         return None
 
+    def _last_chance(self, videos, page, maxpage=2):
+        if page > maxpage:
+            return videos
+
+        res = self.http.get("http://www.svtplay.se/sista-chansen?sida=%s" % page)
+        match = re.search('_svtplay"] = ({.*});', res.text)
+        if not match:
+            return videos
+
+        dataj = json.loads(match.group(1))
+        pages = dataj["context"]["dispatcher"]["stores"]["GridPageStore"]["totalPages"]
+
+        for i  in dataj["context"]["dispatcher"]["stores"]["GridPageStore"]["content"]:
+            videos.append(i["contentUrl"])
+        page += 1
+        self._last_chance(videos, page, pages)
+        return videos
+
+    def _genre(self, jansson):
+        videos = []
+        for i in jansson["context"]["dispatcher"]["stores"]["ClusterStore"]["clips"]:
+            videos.append(i["contentUrl"])
+        return videos
+
     def find_all_episodes(self, options):
-        match = re.search(r'<link rel="alternate" type="application/rss\+xml" [^>]*href="([^"]+)"',
+        parse = urlparse(self._url)
+        
+        if len(parse.path) > 7 and parse.path[-7:] == "rss.xml":
+            match = self.url
+        else:
+            match = re.search(r'<link rel="alternate" type="application/rss\+xml" [^>]*href="([^"]+)"',
                           self.get_urldata())
+            if match:
+                match = match.group(1)
+            
         if match is None:
-            match = re.findall(r'a class="play[^"]+"\s+href="(/video[^"]+)"', self.get_urldata())
-            if not match:
+            videos = []
+            match = re.search('_svtplay"] = ({.*});', self.get_urldata())
+            if match:
+                dataj = json.loads(match.group(1))
+            else:
                 log.error("Couldn't retrieve episode list")
                 return
-            episodes = [urljoin("http://www.svtplay.se", x) for x in match]
+            if re.search("sista-chansen", parse.path):
+                videos = self._last_chance(videos, 1)
+            elif re.search("/genre", parse.path):
+                videos = self._genre(dataj)
+            else:
+                items = dataj["context"]["dispatcher"]["stores"]["VideoTitlePageStore"]["data"]["relatedVideoTabs"]
+                for i in items:
+                    if "sasong" in i["slug"]:
+                        for n in i["videos"]:
+                            if n["url"] not in videos:
+                                videos.append(n["url"])
+                    if "senast" in i["slug"]:
+                        for n in i["videos"]:
+                            if n["url"] not in videos:
+                                videos.append(n["url"])
+
+            episodes = [urljoin("http://www.svtplay.se", x) for x in videos]
         else:
-            data = self.http.request("get", match.group(1)).content
+            data = self.http.request("get", match).content
             xml = ET.XML(data)
 
             episodes = [x.text for x in xml.findall(".//item/link")]
