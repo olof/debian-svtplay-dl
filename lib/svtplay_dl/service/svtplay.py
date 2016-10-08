@@ -121,6 +121,19 @@ class Svtplay(Service, OpenGraphThumbMixin):
                         for n in list(streams.keys()):
                             yield streams[n]
 
+            if i["format"] == "dashhbbtv":
+                streams = dashparse(self.options, self.http.request("get", i["url"]), i["url"])
+                if streams:
+                    for n in list(streams.keys()):
+                        yield streams[n]
+
+                if "alt" in query and len(query["alt"]) > 0:
+                    alt = self.http.get(query["alt"][0])
+                    streams = dashparse(self.options, self.http.request("get", alt.request.url), alt.request.url)
+                    if streams:
+                        for n in list(streams.keys()):
+                            yield streams[n]
+
 
     def find_video_id(self):
         match = re.search('data-video-id="([^"]+)"', self.get_urldata())
@@ -191,7 +204,7 @@ class Svtplay(Service, OpenGraphThumbMixin):
 
     def _genre(self, jansson):
         videos = []
-        for i in jansson["context"]["dispatcher"]["stores"]["ClusterStore"]["clips"]:
+        for i in jansson["clusterPage"]["content"]["clips"]:
             videos.append(i["contentUrl"])
         return videos
 
@@ -208,7 +221,7 @@ class Svtplay(Service, OpenGraphThumbMixin):
             
         if match is None:
             videos = []
-            match = re.search("_svtplay'] = ({.*});", self.get_urldata())
+            match = re.search("__reduxStore'] = ({.*});", self.get_urldata())
             if match:
                 dataj = json.loads(match.group(1))
             else:
@@ -219,7 +232,7 @@ class Svtplay(Service, OpenGraphThumbMixin):
             elif re.search("/genre", parse.path):
                 videos = self._genre(dataj)
             else:
-                items = dataj["context"]["dispatcher"]["stores"]["VideoTitlePageStore"]["data"]["relatedVideoTabs"]
+                items = dataj["videoTitlePage"]["realatedVideoTabs"]
                 for i in items:
                     if "sasong" in i["slug"]:
                         for n in i["videos"]:
