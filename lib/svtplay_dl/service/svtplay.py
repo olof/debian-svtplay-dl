@@ -38,7 +38,7 @@ class Svtplay(Service, OpenGraphThumbMixin):
         if re.match("^[0-9]+$", vid):
             old = True
 
-        url = "http://www.svt.se/videoplayer-api/video/%s" % vid
+        url = "http://api.svt.se/videoplayer-api/video/%s" % vid
         data = self.http.request("get", url)
         if data.status_code == 404:
             yield ServiceError("Can't get the json file for %s" % url)
@@ -91,10 +91,11 @@ class Svtplay(Service, OpenGraphThumbMixin):
                         yield streams[n]
                 if "alt" in query and len(query["alt"]) > 0:
                     alt = self.http.get(query["alt"][0])
-                    streams = hlsparse(self.options, self.http.request("get", alt.request.url), alt.request.url)
-                    if streams:
-                        for n in list(streams.keys()):
-                            yield streams[n]
+                    if alt:
+                        streams = hlsparse(self.options, self.http.request("get", alt.request.url), alt.request.url)
+                        if streams:
+                            for n in list(streams.keys()):
+                                yield streams[n]
             if i["format"] == "hds" or i["format"] == "flash":
                 match = re.search(r"\/se\/secure\/", i["url"])
                 if not match:
@@ -104,10 +105,11 @@ class Svtplay(Service, OpenGraphThumbMixin):
                             yield streams[n]
                     if "alt" in query and len(query["alt"]) > 0:
                         alt = self.http.get(query["alt"][0])
-                        streams = hdsparse(self.options, self.http.request("get", alt.request.url, params={"hdcore": "3.7.0"}), alt.request.url)
-                        if streams:
-                            for n in list(streams.keys()):
-                                yield streams[n]
+                        if alt:
+                            streams = hdsparse(self.options, self.http.request("get", alt.request.url, params={"hdcore": "3.7.0"}), alt.request.url)
+                            if streams:
+                                for n in list(streams.keys()):
+                                    yield streams[n]
             if i["format"] == "dash264":
                 streams = dashparse(self.options, self.http.request("get", i["url"]), i["url"])
                 if streams:
@@ -129,10 +131,11 @@ class Svtplay(Service, OpenGraphThumbMixin):
 
                 if "alt" in query and len(query["alt"]) > 0:
                     alt = self.http.get(query["alt"][0])
-                    streams = dashparse(self.options, self.http.request("get", alt.request.url), alt.request.url)
-                    if streams:
-                        for n in list(streams.keys()):
-                            yield streams[n]
+                    if alt:
+                        streams = dashparse(self.options, self.http.request("get", alt.request.url), alt.request.url)
+                        if streams:
+                            for n in list(streams.keys()):
+                                yield streams[n]
 
 
     def find_video_id(self):
