@@ -21,7 +21,10 @@ class subtitle(object):
 
     def download(self):
         subdata = self.http.request("get", self.url, cookies=self.options.cookies)
-        
+        if subdata.status_code != 200:
+            log.warning("Can't download subtitle file")
+            return
+
         data = None
        
         if self.subtype == "tt":
@@ -91,7 +94,7 @@ class subtitle(object):
                         sec = float(begin2[2]) + float(duration2[2])
                     except ValueError:
                         sec = 0.000
-                    end = "%02d:%02d:%06.3f" % (int(begin[0]), int(begin[1]), sec)
+                    end = "%02d:%02d:%06.3f" % (int(begin2[0]), int(begin2[1]), sec)
                 else:
                     end = node.attrib["end"]
                 data += '%s\n%s --> %s\n' % (i, begin.replace(".", ","), end.replace(".", ","))
