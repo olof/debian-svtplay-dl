@@ -101,7 +101,7 @@ class Tv4play(Service, OpenGraphThumbMixin):
             elif i.find("mediaFormat").text == "smi":
                 yield subtitle(copy.copy(self.options), "smi", i.find("url").text)
 
-        url = "https://prima.tv4play.se/api/web/asset/%s/play?protocol=hls" % vid
+        url = "https://prima.tv4play.se/api/web/asset/%s/play?protocol=hls3" % vid
         data = self.http.request("get", url, cookies=self.cookies).content
         xml = ET.XML(data)
         ss = xml.find("items")
@@ -114,8 +114,9 @@ class Tv4play(Service, OpenGraphThumbMixin):
                 parse = urlparse(i.find("url").text)
                 if parse.path.endswith("m3u8"):
                     streams = hlsparse(self.options, self.http.request("get", i.find("url").text), i.find("url").text)
-                    for n in list(streams.keys()):
-                        yield streams[n]
+                    if streams:
+                        for n in list(streams.keys()):
+                            yield streams[n]
 
     def _get_show_info(self):
         show = self._get_showname(self.url)
@@ -205,11 +206,14 @@ class Tv4play(Service, OpenGraphThumbMixin):
 
     def _login(self, username, password):
         data = self.http.request("get", "https://www.tv4play.se/session/new?https=")
-        url = "https://account.services.tv4play.se/authenticate"
+        url = "https://account.services.tv4play.se/session/authenticate"
         postdata = {"username" : username, "password": password, "https": "", "client": "web"}
 
         data = self.http.request("post", url, data=postdata, cookies=self.cookies)
-        res = data.json()
+        try:
+            res = data.json()
+        except ValueError:
+            return ServiceError("Cant decode output from tv4play")
         if "errors" in res:
             message = res["errors"][0]
             if is_py2:
