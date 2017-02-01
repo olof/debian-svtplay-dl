@@ -1,3 +1,10 @@
+svtplay-dl (1.9.1-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version 1.9.1. Closes: #853772; LP: #1660733
+
+ -- Gunnar Hjalmarsson <gunnarhj@ubuntu.com>  Wed, 01 Feb 2017 16:20:00 +0100
+
 svtplay-dl (1.8-1) unstable; urgency=medium
 
   * New upstream version 1.8

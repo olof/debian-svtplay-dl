@@ -3,9 +3,10 @@ from json import dumps
 from random import sample
 import subprocess
 import os
+import platform
 
 from svtplay_dl.log import log
-from svtplay_dl.utils import which
+from svtplay_dl.utils import which, is_py3
 
 
 class postprocess(object):
@@ -29,8 +30,13 @@ class postprocess(object):
                 lines   = block.strip('-').split('\n')
                 txt     = '\r\n'.join(lines[2:])
                 return txt
+
+            if platform.system() == "Windows" and is_py3:
+                fd = open(self, encoding="utf8")
+            else:
+                fd = open(self)
             return list(map(parse_block,
-                        open(self).read().strip().replace('\r', '').split('\n\n')))
+                        fd.read().strip().replace('\r', '').split('\n\n')))
         
         def query(self):
             random_sentences = ' '.join(sample(parse(self),8)).replace('\r\n', '')
@@ -40,8 +46,11 @@ class postprocess(object):
             try:
                 r = post(url, data=dumps(payload), headers=headers, timeout=30) # Note: reasonable timeout i guess? svtplay-dl is mainly used while multitasking i presume, and it is heroku after all (fast enough)
                 if r.status_code == codes.ok:
-                    response = r.json()
-                    return response['language']
+                    try:
+                        response = r.json()
+                        return response['language']
+                    except TypeError:
+                        return 'und'
                 else:
                     log.error("Server error appeared. Setting language as undetermined.")
                     return 'und'
@@ -88,14 +97,14 @@ class postprocess(object):
         if self.stream.options.output.endswith('.mp4') is False:
             orig_filename = self.stream.options.output
             name, ext = os.path.splitext(orig_filename)
-            new_name = "{}.mp4".format(name)
+            new_name = u"{}.mp4".format(name)
 
             if self.merge_subtitle:
-                log.info("Muxing %s and merging its subtitle into %s", orig_filename, new_name)
+                log.info(u"Muxing %s and merging its subtitle into %s", orig_filename, new_name)
             else:
-                log.info("Muxing %s into %s", orig_filename, new_name)
-            
-            tempfile = "{}.temp".format(orig_filename)
+                log.info(u"Muxing %s into %s".format(orig_filename, new_name))
+
+            tempfile = u"{}.temp".format(orig_filename)
             arguments = ["-map", "0:v", "-map", "0:a", "-c", "copy", "-copyts", "-f", "mp4"]
             if ext == ".ts":
                 arguments += ["-bsf:a", "aac_adtstoasc"]
@@ -146,10 +155,10 @@ class postprocess(object):
             log.info("Merge audio, video and subtitle into %s", orig_filename)
         else:
             log.info("Merge audio and video into %s", orig_filename)
-        
-        tempfile = "{}.temp".format(orig_filename)
+
+        tempfile = u"{}.temp".format(orig_filename)
         name = os.path.splitext(orig_filename)[0]
-        audio_filename = "{}.m4a".format(name)
+        audio_filename = u"{}.m4a".format(name)
         arguments = ["-c:v", "copy", "-c:a", "copy", "-f", "mp4"]
         cmd = [self.detect, "-i", orig_filename, "-i", audio_filename]
 

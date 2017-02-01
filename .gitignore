@@ -9,5 +9,3 @@ svtplay-dl
 svtplay-dl.1
 svtplay-dl.1.gz
 github.com/*
-debian/patches/
-.pc/
