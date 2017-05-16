@@ -34,6 +34,7 @@ from svtplay_dl.service.twitch import Twitch
 from svtplay_dl.service.lemonwhale import Lemonwhale
 from svtplay_dl.service.mtvnn import Mtvnn
 from svtplay_dl.service.mtvservices import Mtvservices
+from svtplay_dl.service.nhl import NHL
 from svtplay_dl.service.nrk import Nrk
 from svtplay_dl.service.oppetarkiv import OppetArkiv
 from svtplay_dl.service.picsearch import Picsearch
@@ -45,6 +46,7 @@ from svtplay_dl.service.ruv import Ruv
 from svtplay_dl.service.raw import Raw
 from svtplay_dl.service.solidtango import Solidtango
 from svtplay_dl.service.sr import Sr
+from svtplay_dl.service.svt import Svt
 from svtplay_dl.service.svtplay import Svtplay
 from svtplay_dl.service.tv4play import Tv4play
 from svtplay_dl.service.urplay import Urplay
@@ -54,7 +56,7 @@ from svtplay_dl.service.viasatsport import Viasatsport
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "1.9.1"
+__version__ = "1.9.4"
 
 sites = [
     Aftonbladet,
@@ -74,6 +76,7 @@ sites = [
     Lemonwhale,
     Mtvservices,
     Mtvnn,
+    NHL,
     Nrk,
     Qbrick,
     Picsearch,
@@ -82,6 +85,7 @@ sites = [
     Radioplay,
     Solidtango,
     Sr,
+    Svt,
     Svtplay,
     OppetArkiv,
     Tv4play,
@@ -124,7 +128,7 @@ class Options(object):
         self.silent = False
         self.force = False
         self.quality = 0
-        self.flexibleq = None
+        self.flexibleq = 0
         self.list_quality = False
         self.other = None
         self.subtitle = False
@@ -213,6 +217,7 @@ def get_all_episodes(stream, options, url):
             substream = service_handler(sites, copy.copy(options), o)
 
         log.info("Episode %d of %d", idx + 1, len(episodes))
+        log.info("Url: %s",o) 
 
         # get_one_media overwrites options.output...
         get_one_media(substream, copy.copy(options))
@@ -389,7 +394,7 @@ def main():
                       action="store_true", dest="subtitle", default=False,
                       help="download subtitle from the site if available")
     parser.add_option("-M", "--merge-subtitle", action="store_true", dest="merge_subtitle",
-                      default=False, help="merge subtitle with video/audio file with corresponding ISO639-3 language code. use with -S for external also.")
+                      default=False, help="merge subtitle with video/audio file with corresponding ISO639-3 language code. this invokes --remux automatically. use with -S for external also.")
     parser.add_option("--force-subtitle", dest="force_subtitle", default=False,
                       action="store_true", help="download only subtitle if its used with -S")
     parser.add_option("--require-subtitle", dest="require_subtitle", default=False,
@@ -427,6 +432,8 @@ def main():
                       help="If two streams have the same quality, choose the one you prefer")
     parser.add_option("--remux", dest="remux", default=False, action="store_true",
                       help="Remux from one container to mp4 using ffmpeg or avconv")
+    parser.add_option("--include-clips", dest="include_clips", default=False, action="store_true",
+                      help="include clips from websites when using -A")
                       
     (options, args) = parser.parse_args()
     if not args:
@@ -493,4 +500,5 @@ def mergeParserOption(options, parser):
     options.get_all_subtitles = parser.get_all_subtitles
     options.get_raw_subtitles = parser.get_raw_subtitles
     options.convert_subtitle_colors = parser.convert_subtitle_colors
+    options.include_clips = parser.include_clips
     return options

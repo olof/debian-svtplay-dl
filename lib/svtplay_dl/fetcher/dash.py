@@ -76,6 +76,7 @@ def parsesegments(content, url):
         init = vinit.attrib["initialization"]
     nrofvideos = content[0].findall(".//{urn:mpeg:dash:schema:mpd:2011}S[@r]")
     selemtns = content[0].findall(".//{urn:mpeg:dash:schema:mpd:2011}S")
+    total = 0
     if nrofvideos:
         total = int(nrofvideos[0].attrib["r"]) + len(selemtns) + 1
         time = False
@@ -92,7 +93,7 @@ def parsesegments(content, url):
         bitrate = int(i.attrib["bandwidth"])
         if vinit is None:
             init = i.find("{urn:mpeg:dash:schema:mpd:2011}SegmentTemplate").attrib["initialization"]
-        vinit = init.replace("$RepresentationID$", id)
+        vidinit = init.replace("$RepresentationID$", id)
         if media is None:
             scheme = i.find("{urn:mpeg:dash:schema:mpd:2011}SegmentTemplate").attrib["media"]
         if "startNumber" in content[0].findall(".//{urn:mpeg:dash:schema:mpd:2011}SegmentTemplate")[0].attrib:
@@ -100,7 +101,7 @@ def parsesegments(content, url):
         else:
             start = 1
         dirname = os.path.dirname(url) + "/"
-        segments.append(urljoin(dirname, vinit))
+        segments.append(urljoin(dirname, vidinit))
         name = scheme.replace("$RepresentationID$", id)
         if "$Number" in name:
             match = re.search("\$Number(\%\d+)d\$", name)

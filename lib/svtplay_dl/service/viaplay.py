@@ -30,13 +30,17 @@ class Viaplay(Service, OpenGraphThumbMixin):
         'play.tv3.lt', 'tv3play.tv3.ee', 'tvplay.skaties.lv'
     ]
 
-    def _get_video_id(self):
+    def _get_video_id(self, url=None):
         """
         Extract video id. It will try to avoid making an HTTP request
         if it can find the ID in the URL, but otherwise it will try
         to scrape it from the HTML document. Returns None in case it's
         unable to extract the ID at all.
         """
+        if url:
+            html_data = self.http.request("get", url).text
+        else:
+            html_data = self.get_urldata()
         html_data = self.get_urldata()
         match = re.search(r'data-video-id="([0-9]+)"', html_data)
         if match:
@@ -82,11 +86,12 @@ class Viaplay(Service, OpenGraphThumbMixin):
                 if match:
                     janson = json.loads(match.group(1))
                     for i in janson["format"]["videos"].keys():
-                        for n in janson["format"]["videos"][i]["program"]:
-                            if str(n["episodeNumber"]) and int(episodenr) == n["episodeNumber"] and int(season) == n["seasonNumber"]:
-                                return n["id"]
-                            elif n["id"] == episodenr:
-                                return episodenr
+                        if "program" in janson["format"]["videos"][str(i)]:
+                            for n in janson["format"]["videos"][i]["program"]:
+                                if str(n["episodeNumber"]) and int(episodenr) == n["episodeNumber"] and int(season) == n["seasonNumber"]:
+                                    return n["id"]
+                                elif n["id"] == episodenr:
+                                    return episodenr
 
         parse = urlparse(self.url)
         match = re.search(r'/\w+/(\d+)', parse.path)
@@ -96,20 +101,20 @@ class Viaplay(Service, OpenGraphThumbMixin):
         if match:
             return match.group(1)
         return None
-
+        
+        
     def get(self):
         vid = self._get_video_id()
         if vid is None:
             yield ServiceError("Can't find video file for: %s" % self.url)
             return
-
-        url = "http://playapi.mtgx.tv/v3/videos/%s" % vid
-        self.options.other = ""
-        data = self.http.request("get", url)
+            
+        data = self. _get_video_data(vid)
         if data.status_code == 403:
             yield ServiceError("Can't play this because the video is geoblocked.")
             return
         dataj = json.loads(data.text)
+        
         if "msg" in dataj:
             yield ServiceError(dataj["msg"])
             return
@@ -117,6 +122,9 @@ class Viaplay(Service, OpenGraphThumbMixin):
         if dataj["type"] == "live":
             self.options.live = True
 
+        if self.options.output_auto:
+            self.options.output = self.outputfilename(dataj,vid, self.options.output)
+            
         if self.exclude():
             yield ServiceError("Excluding video")
             return
@@ -130,16 +138,6 @@ class Viaplay(Service, OpenGraphThumbMixin):
         if "msg" in streamj:
             yield ServiceError("Can't play this because the video is either not found or geoblocked.")
             return
-
-        if self.options.output_auto:
-            directory = os.path.dirname(self.options.output)
-            self.options.service = "tv3play"
-            basename = self._autoname(dataj)
-            title = "%s-%s-%s" % (basename, vid, self.options.service)
-            if len(directory):
-                self.options.output = os.path.join(directory, title)
-            else:
-                self.options.output = title
 
         if dataj["sami_path"]:
             if dataj["sami_path"].endswith("vtt"):
@@ -155,7 +153,7 @@ class Viaplay(Service, OpenGraphThumbMixin):
             else:
                 subtype = "sami"
             if self.options.get_all_subtitles:
-                yield subtitle(copy.copy(self.options), subtype, dataj["subtitles_for_hearing_impaired"],"-SDH")
+                yield subtitle(copy.copy(self.options), subtype, dataj["subtitles_for_hearing_impaired"], "-SDH")
             else: 
                 yield subtitle(copy.copy(self.options), subtype, dataj["subtitles_for_hearing_impaired"])
 
@@ -184,36 +182,109 @@ class Viaplay(Service, OpenGraphThumbMixin):
                     yield streams[n]
 
     def find_all_episodes(self, options):
-        videos = []
+        episodes = []
         match = re.search('"ContentPageProgramStore":({.*}),"ApplicationStore', self.get_urldata())
         if match:
             janson = json.loads(match.group(1))
+            season = re.search("sasong-(\d+)", urlparse(self.url).path)
+            if season:
+                season = season.group(1)
             seasons = []
             for i in janson["format"]["seasons"]:
-                seasons.append(i["seasonNumber"])
-            for i in seasons:
-                for n in janson["format"]["videos"][str(i)]["program"]:
-                    videos.append(n["sharingUrl"])
+                if season:
+                    if int(season) == i["seasonNumber"]:
+                        seasons.append(i["seasonNumber"])
+                else:
+                    seasons.append(i["seasonNumber"])
 
-        n = 0
-        episodes = []
-        for i in videos:
-            if n == options.all_last:
-                break
-            episodes.append(i)
-            n += 1
+            for i in seasons:
+                if "program" in janson["format"]["videos"][str(i)]:
+                    for n in janson["format"]["videos"][str(i)]["program"]:
+                        episodes = self._videos_to_list(n["sharingUrl"],n["id"],episodes)
+                if self.options.include_clips:
+                    if "clip" in janson["format"]["videos"][str(i)]:
+                        for n in janson["format"]["videos"][str(i)]["clip"]:
+                            episodes = self._videos_to_list(n["sharingUrl"],n["id"],episodes)
+
+        if options.all_last > 0:
+            return sorted(episodes[-options.all_last:])
+        return sorted(episodes)
+        
+ 
+            
+    def _videos_to_list(self, url,vid, episodes):
+        dataj = json.loads(self._get_video_data(vid).text)
+        if not "msg" in dataj:
+            filename = self.outputfilename(dataj, vid, self.options.output)
+            if not self.exclude2(filename) and url not in episodes:
+                episodes.append(url)
         return episodes
+        
+    def _get_video_data(self, vid):
+        url = "http://playapi.mtgx.tv/v3/videos/%s" % vid
+        self.options.other = ""
+        data = self.http.request("get", url)
+        
+        return data
+    
+    def outputfilename(self, data,vid, filename):
+        self.options.service = "viafree"
+        if filename:
+            directory = os.path.dirname(filename)
+        else:
+            directory = ""
+            
+        basename = self._autoname(data)
+        title = "%s-%s-%s" % (basename, vid, self.options.service)
+        if len(directory):
+            output = os.path.join(directory, title)
+        else:
+            output = title
+        return output
 
     def _autoname(self, dataj):
         program = dataj["format_slug"]
-        season = dataj["format_position"]["season"]
+        season = None
         episode = None
+        title = None
+
+        if "season" in dataj["format_position"]:
+            if dataj["format_position"]["season"] > 0:
+                season = dataj["format_position"]["season"]
         if season:
             if len(dataj["format_position"]["episode"]) > 0:
                 episode = dataj["format_position"]["episode"]
+            try:
+                episode = int(episode)
+            except ValueError:
+                title = filenamify(episode)
+                episode = None
+
+        if dataj["type"] == "clip":
+            #Removes the show name from the end of the filename
+            #e.g. Showname.S0X.title instead of Showname.S07.title-showname
+            match = re.search(r'(.+)-', dataj["title"])
+            if match:
+                title = filenamify(match.group(1))
+            else:
+                title = filenamify(dataj["title"])
+            if "derived_from_id" in dataj:
+                if dataj["derived_from_id"]:
+                    parent_id = dataj["derived_from_id"]
+                    parent_episode = self.http.request("get", "http://playapi.mtgx.tv/v3/videos/%s" % parent_id)
+                    if  parent_episode.status_code != 403: #if not geoblocked
+                        datajparent = json.loads(parent_episode.text)
+                        if not season and datajparent["format_position"]["season"] > 0:
+                            season = datajparent["format_position"]["season"]
+                        if len(datajparent["format_position"]["episode"]) > 0:
+                            episode = datajparent["format_position"]["episode"]
+
         name = filenamify(program)
         if season:
-            name = "{}.s{:02d}".format(name, int(season))
+            name = "{0}.s{1:02d}".format(name, int(season))
         if episode:
-            name = "{}e{:02d}".format(name, int(episode))
+            name = "{0}e{1:02d}".format(name, int(episode))
+        if title:
+            name = "{0}.{1}".format(name, title)
+
         return name
