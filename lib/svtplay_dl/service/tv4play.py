@@ -29,11 +29,11 @@ class Tv4play(Service, OpenGraphThumbMixin):
             yield ServiceError("Can't find video id for %s" % self.url)
             return
 
-        if self.options.username and self.options.password:
-            work = self._login(self.options.username, self.options.password)
-            if isinstance(work, Exception):
-                yield work
-                return
+        # if self.options.username and self.options.password:
+            # work = self._login(self.options.username, self.options.password)
+            # if isinstance(work, Exception):
+                # yield work
+                # return
 
         url = "http://prima.tv4play.se/api/web/asset/%s/play" % vid
         data = self.http.request("get", url, cookies=self.cookies)
@@ -165,10 +165,27 @@ class Tv4play(Service, OpenGraphThumbMixin):
             show = quote_plus(show)
         return show
 
+    def _seasoninfo(self, data):
+        if "season" in data and data["season"]:
+            season = "{:02d}".format(data["season"])
+            if "episode" in data:
+                episode = "{:02d}".format(data["episode"])
+                if int(season) == 0 and int(episode) == 0:
+                    return None
+                return "s%se%s" % (season, episode)
+            else:
+                return "s%s" % season
+        else:
+            return None
+
     def _autoname(self, vid):
         jsondata = self._get_show_info()
         for i in jsondata["results"]:
             if vid == i["id"]:
+                season = self._seasoninfo(i)
+                if season:
+                   index = len(i["program"]["name"])
+                   return i["title"][:index] + ".%s%s" % (season, i["title"][index:])
                 return i["title"]
         return self._get_clip_info(vid)
 
@@ -181,11 +198,11 @@ class Tv4play(Service, OpenGraphThumbMixin):
 
     def find_all_episodes(self, options):
         premium = False
-        if options.username and options.password:
-            premium = self._login(options.username, options.password)
-            if isinstance(premium, Exception):
-                log.error(premium.message)
-                return None
+        # if options.username and options.password:
+            # premium = self._login(options.username, options.password)
+            # if isinstance(premium, Exception):
+                # log.error(premium.message)
+                # return None
 
         jsondata = self._get_show_info()
 
@@ -212,24 +229,24 @@ class Tv4play(Service, OpenGraphThumbMixin):
 
         return episodes
 
-    def _login(self, username, password):
-        data = self.http.request("get", "https://www.tv4play.se/session/new?https=")
-        url = "https://account.services.tv4play.se/session/authenticate"
-        postdata = {"username" : username, "password": password, "https": "", "client": "web"}
+    # def _login(self, username, password):
+        # data = self.http.request("get", "https://www.tv4play.se/session/new?https=")
+        # url = "https://account.services.tv4play.se/session/authenticate"
+        # postdata = {"username" : username, "password": password, "https": "", "client": "web"}
 
-        data = self.http.request("post", url, data=postdata, cookies=self.cookies)
-        try:
-            res = data.json()
-        except ValueError:
-            return ServiceError("Cant decode output from tv4play")
-        if "errors" in res:
-            message = res["errors"][0]
-            if is_py2:
-                message = message.encode("utf8")
-            return ServiceError(message)
-        self.cookies={"JSESSIONID": res["vimond_session_token"]}
+        # data = self.http.request("post", url, data=postdata, cookies=self.cookies)
+        # try:
+            # res = data.json()
+        # except ValueError:
+            # return ServiceError("Cant decode output from tv4play")
+        # if "errors" in res:
+            # message = res["errors"][0]
+            # if is_py2:
+                # message = message.encode("utf8")
+            # return ServiceError(message)
+        # self.cookies={"JSESSIONID": res["vimond_session_token"]}
 
-        return True
+        # return True
 
 
 def findvid(url, data):

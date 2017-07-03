@@ -16,13 +16,26 @@ If you have OS X and `Homebrew`_ you can install with:
 Debian and Ubuntu
 ~~~~~~~~~~~~~~~~~
 
-svtplay-dl is available in Debian in Jessie and later and Ubuntu in
-14.04 and later, which means you can install it using apt:
+svtplay-dl(v 0.30) is available in Debian in Jessie and later and Ubuntu in
+14.04 and later, which means you can install it straight away using apt (even though version included in the official Debian and Ubuntu apt repos is very old and we **strongly** recommend using our own apt repo which always include the latest version.)
 
-::
+    **svtplay-dl apt repo for debian / ubuntu (https://apt.svtplay-dl.se/)**
+    
+    # Add the release PGP keys:
+    
+    curl -s https://svtplay-dl.se/release-key.txt | sudo apt-key add -
 
-    apt-get install svtplay-dl
+    # Add the "release" channel to your APT sources:
+    
+    echo "deb http://apt.svtplay-dl.se/ svtplay-dl release" | sudo tee /etc/apt/sources.list.d/svtplay-dl.list
 
+
+    # Update and install svtplay-dl:
+    
+    sudo apt-get update
+    
+    sudo apt-get install svtplay-dl
+    
 … as root.
 
 Windows
@@ -30,10 +43,14 @@ Windows
 
 You can download windows binaries from `svtplay-dl.se`_
 
-If you want to build your own windows binaries 
-Install pyinstaller 3.1.1 (https://pypi.python.org/pypi/PyInstaller/3.1.1)
-Follow the steps listed under From source below 
-Run scripts\pyinstaller.exe --noupx --onefile c:\path\to\svtplay-dl-clone\spec\svtplay-dl.spec (where you replace the path with the correct one)
+If you want to build your own windows binaries:
+
+1. Install pyinstaller 3.1.1 (https://pypi.python.org/pypi/PyInstaller/3.1.1)
+2. Follow the steps listed under **From source**
+3. Run 
+::
+    pyinstaller.exe --noupx --onefile c:\path\to\svtplay-dl-clone\spec\svtplay-dl.spec  (where you replace the path with the correct one)
+4. Find binary in dist folder. 
 
 Other systems with python
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -114,7 +131,7 @@ This script works for:
 -  svtplay.se
 -  viafree.se (former tv3play.se, tv6play.se, tv8play.se, tv10play.se)
 -  viafree.dk (former tv3play.dk)
--  viafree.se (former tv3play.no, viasat4play.no)
+-  viafree.no (former tv3play.no, viasat4play.no)
 -  tv3play.ee
 -  tv3play.lt
 -  tv3play.lv
