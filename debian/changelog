@@ -1,3 +1,10 @@
+svtplay-dl (1.9.6-1) unstable; urgency=medium
+
+  * New upstream version 1.9.6
+  * debian/control: Bump Standards-Version to 4.1.0
+
+ -- Olof Johansson <olof@ethup.se>  Tue, 19 Sep 2017 01:35:44 +0200
+
 svtplay-dl (1.9.4-1) unstable; urgency=medium
 
   * New upstream version 1.9.4
