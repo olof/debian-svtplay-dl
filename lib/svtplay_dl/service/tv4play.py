@@ -98,8 +98,8 @@ class Tv4play(Service, OpenGraphThumbMixin):
                     if streams:
                         for n in list(streams.keys()):
                             yield streams[n]
-            elif i.find("mediaFormat").text == "smi":
-                yield subtitle(copy.copy(self.options), "smi", i.find("url").text)
+            elif i.find("mediaFormat").text == "webvtt":
+                yield subtitle(copy.copy(self.options), "wrst", i.find("url").text)
 
         url = "https://prima.tv4play.se/api/web/asset/%s/play?protocol=hls3" % vid
         data = self.http.request("get", url, cookies=self.cookies).content
@@ -156,7 +156,12 @@ class Tv4play(Service, OpenGraphThumbMixin):
         parse = urlparse(self.url)
         if parse.path.count("/") > 2:
             match = re.search("^/([^/]+)/", parse.path)
-            show = match.group(1)
+            if "program" == match.group(1):
+                match = re.search("^/program/([^/]+)/", parse.path)
+                if match:
+                    show = match.group(1)
+            else:
+                show = match.group(1)
         else:
             show = parse.path[parse.path.find("/", 1)+1:]
         if not re.search("%", show):
@@ -252,27 +257,21 @@ class Tv4play(Service, OpenGraphThumbMixin):
 def findvid(url, data):
     parse = urlparse(url)
     if "tv4play.se" in url:
-        try:
-            vid = parse_qs(parse.query)["video_id"][0]
-        except KeyError:
-            return None
+        if "video_id" in parse_qs(parse.query):
+            return parse_qs(parse.query)["video_id"][0]
+        match = re.search(r'burtVmanId: "(\d+)"', data)
+        if match:
+            return match.group(1)
     else:
         match = re.search(r"\"vid\":\"(\d+)\",", data)
         if match:
-            vid = match.group(1)
-        else:
-            match = re.search(r"-(\d+)$", url)
+            return match.group(1)
+        match = re.search(r"-(\d+)$", url)
+        if match:
+            return match.group(1)
+        match = re.search(r"meta content='([^']+)' property='og:video'", data)
+        if match:
+            match = re.search(r"vid=(\d+)&", match.group(1))
             if match:
-                vid = match.group(1)
-            else:
-                match = re.search(r"meta content='([^']+)' property='og:video'", data)
-                if match:
-                    match = re.search(r"vid=(\d+)&", match.group(1))
-                    if match:
-                        vid = match.group(1)
-                    else:
-                        log.error("Can't find video id for %s", url)
-                        return
-                else:
-                    return None
-    return vid
+                return match.group(1)
+    return None

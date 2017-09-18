@@ -217,15 +217,14 @@ class Svtplay(Service, OpenGraphThumbMixin):
                         if match:
                             tab = match.group(1)
                             
-                    items = dataj["relatedVideoContent"]["relatedVideosTabs"]
+                    items = dataj["relatedVideoContent"]["relatedVideosAccordion"]
                     for i in items:
                         if tab:
                             if i["slug"] == tab:
                                 videos = self.videos_to_list(i["videos"], videos)
                         else:
-                            if "sasong" in i["slug"] or "senast" in i["slug"]:
+                            if "klipp" not in i["slug"] and "kommande" not in i["slug"]:
                                 videos = self.videos_to_list(i["videos"], videos)
-
                         if self.options.include_clips: 
                             if i["slug"] == "klipp":
                                 videos = self.videos_to_list(i["videos"], videos)
