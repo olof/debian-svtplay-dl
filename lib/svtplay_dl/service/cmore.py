@@ -4,7 +4,7 @@ import copy
 import os
 
 from svtplay_dl.service import Service
-
+from svtplay_dl.log import log
 from svtplay_dl.fetcher.dash import dashparse
 from svtplay_dl.subtitle import subtitle
 from svtplay_dl.utils import filenamify
@@ -18,9 +18,9 @@ class Cmore(Service):
         if not self.options.username or not self.options.password:
             yield ServiceError("You need username and password to download things from this site.")
             return
-        token = self._login()
+        token, message = self._login()
         if not token:
-            yield ServiceError("Can't find authenticity_token needed to login")
+            yield ServiceError(message)
             return
         res = self.http.get(self.url)
         match = re.search('data-asset-splash-section data-asset-id="([^"]+)"', res.text)
@@ -75,7 +75,12 @@ class Cmore(Service):
         url = "https://restapi.cmore.se/api/tve_web/asset/{0}.json?expand=metadata".format(vid)
         res = self.http.get(url)
         janson = res.json()["asset"]["metadata"]
-        name = janson["title"]["$"]
+        if isinstance(janson["title"], list):
+            for i in janson["title"]:
+                if i["@xml:lang"] == "sv_SE": # if we add other .tld, we might need to change this.
+                    name = i["$"]
+        else:
+            name = janson["title"]["$"]
 
         if "season" in janson:
             season = "{0:02d}".format(int(janson["season"]["$"]))
@@ -85,7 +90,10 @@ class Cmore(Service):
     def find_all_episodes(self, options):
         episodes = []
 
-        self._login()
+        token, message = self._login()
+        if not token:
+            log.error(message)
+            return
         res = self.http.get(self.url)
         tags = re.findall('<a class="card__link" href="([^"]+)"', res.text)
         for i in tags:
@@ -100,12 +108,26 @@ class Cmore(Service):
     def _login(self):
         url = "https://www.cmore.se/login"
         res = self.http.get(url, cookies=self.cookies)
-        match = re.search('authenticity_token" value="([^"]+)"', res.text)
-        if not match:
-            return None
-        post = {"username": self.options.username, "password": self.options.password, "authenticity_token": match.group(1),
-                "redirect": "true"}
+        if self.options.cmoreoperator:
+            post = {"username": self.options.username, "password": self.options.password,
+                    "operator": self.options.cmoreoperator, "country_code": "se"}
+        else:
+            match = re.search('authenticity_token" value="([^"]+)"', res.text)
+            if not match:
+                return None, "Can't find authenticity_token needed to login"
+            post = {"username": self.options.username, "password": self.options.password, "authenticity_token": match.group(1),
+                    "redirect": "true"}
         res = self.http.post("https://account.cmore.se/session?client=web", json=post, cookies=self.cookies)
+        if res.status_code >= 400:
+            return None, "Wrong username or password"
         janson = res.json()
         token = janson["data"]["vimond_token"]
-        return token
+        return token, None
+
+    def operatorlist(self):
+        res = self.http.get("https://www.cmore.se/operator/login")
+        res.encoding = "utf-8"
+        match = re.findall('<option value="([^"]+)">([^"]+)</option>', res.text)
+        for i in match:
+            message = "operator: '{0}' value: '{1}'".format(i[1], i[0].replace("-", ""))
+            print(message)
