@@ -35,6 +35,9 @@ def templateelemt(element, filename, idnumber):
     else:
         start = 0
     timeline = element.find("{urn:mpeg:dash:schema:mpd:2011}SegmentTimeline")
+    if timeline is None:
+        return
+
     rvalue = timeline.findall(".//{urn:mpeg:dash:schema:mpd:2011}S[@r]")
     selements = timeline.findall(".//{urn:mpeg:dash:schema:mpd:2011}S")
     selements.pop()
@@ -94,11 +97,12 @@ def adaptionset(element, url, baseurl=None):
             filename = urljoin(filename, i.find("{urn:mpeg:dash:schema:mpd:2011}BaseURL").text)
 
         if i.find("{urn:mpeg:dash:schema:mpd:2011}SegmentBase") is not None:
+            segments = True
             files.append(filename)
         if template is not None:
             segments = True
             files = templateelemt(template, filename, idnumber)
-        elif i.find("{urn:mpeg:dash:schema:mpd:2011}SegmentTemplate"):
+        elif i.find("{urn:mpeg:dash:schema:mpd:2011}SegmentTemplate") is not None:
             segments = True
             files = templateelemt(i.find("{urn:mpeg:dash:schema:mpd:2011}SegmentTemplate"), filename, idnumber)
 
@@ -109,6 +113,7 @@ def adaptionset(element, url, baseurl=None):
 
 def dashparse(options, res, url):
     streams = {}
+    baseurl = None
 
     if not res:
         return None
@@ -116,12 +121,18 @@ def dashparse(options, res, url):
     if res.status_code >= 400:
         streams[0] = ServiceError("Can't read DASH playlist. {0}".format(res.status_code))
         return streams
+    if len(res.text) < 1:
+        streams[0] = ServiceError("Can't read DASH playlist. {0}, size: {1}".format(res.status_code, len(res.text)))
+        return
     xml = ET.XML(res.text)
 
+    if xml.find("./{urn:mpeg:dash:schema:mpd:2011}BaseURL") is not None:
+        baseurl = xml.find("./{urn:mpeg:dash:schema:mpd:2011}BaseURL").text
+
     temp = xml.findall('.//{urn:mpeg:dash:schema:mpd:2011}AdaptationSet[@mimeType="audio/mp4"]')
-    audiofiles = adaptionset(temp, url)
+    audiofiles = adaptionset(temp, url, baseurl)
     temp = xml.findall('.//{urn:mpeg:dash:schema:mpd:2011}AdaptationSet[@mimeType="video/mp4"]')
-    videofiles = adaptionset(temp, url)
+    videofiles = adaptionset(temp, url, baseurl)
 
     for i in videofiles.keys():
         bitrate = (int(i) + int(list(audiofiles.keys())[0]))
@@ -146,46 +157,8 @@ class DASH(VideoRetriever):
             self._download2(self.files)
         else:
             if self.audio:
-                self._download(self.audio, audio=True)
-            self._download(self.url)
-
-    def _download(self, url, audio=False):
-        cookies = self.kwargs["cookies"]
-        data = self.http.request("get", url, cookies=cookies, headers={'Range': 'bytes=0-8192'})
-        try:
-            total_size = data.headers['Content-Range']
-            total_size = total_size[total_size.find("/")+1:]
-        except KeyError:
-            total_size = 0
-        total_size = int(total_size)
-        bytes_so_far = 8192
-        if audio:
-            file_d = output(copy.copy(self.options), "m4a")
-        else:
-            file_d = output(self.options, self.options.other)
-        if hasattr(file_d, "read") is False:
-            return
-        file_d.write(data.content)
-        eta = ETA(total_size)
-        while bytes_so_far < total_size:
-            old = bytes_so_far + 1
-            bytes_so_far = old + 1000000
-            if bytes_so_far > total_size:
-                bytes_so_far = total_size
-
-            bytes_range = "bytes=%s-%s" % (old, bytes_so_far)
-
-            data = self.http.request("get", url, cookies=cookies, headers={'Range': bytes_range})
-            file_d.write(data.content)
-            if self.options.output != "-" and not self.options.silent:
-                eta.update(old)
-                progressbar(total_size, old, ''.join(["ETA: ", str(eta)]))
-
-        if self.options.output != "-":
-            file_d.close()
-            progressbar(bytes_so_far, total_size, "ETA: complete")
-            progress_stream.write('\n')
-            self.finished = True
+                self._download_url(self.audio, audio=True)
+            self._download_url(self.url)
 
     def _download2(self, files, audio=False):
         cookies = self.kwargs["cookies"]
@@ -194,12 +167,12 @@ class DASH(VideoRetriever):
             file_d = output(copy.copy(self.options), "m4a")
         else:
             file_d = output(self.options, self.options.other)
-        if hasattr(file_d, "read") is False:
+        if file_d is None:
             return
         eta = ETA(len(files))
         n = 1
         for i in files:
-            if self.options.output != "-" and not self.options.silent:
+            if not self.options.silent:
                 eta.increment()
                 progressbar(len(files), n, ''.join(['ETA: ', str(eta)]))
                 n += 1
@@ -210,8 +183,7 @@ class DASH(VideoRetriever):
             data = data.content
             file_d.write(data)
 
-        if self.options.output != "-":
-            file_d.close()
-            if not self.options.silent:
-                progress_stream.write('\n')
-            self.finished = True
+        file_d.close()
+        if not self.options.silent:
+            progress_stream.write('\n')
+        self.finished = True

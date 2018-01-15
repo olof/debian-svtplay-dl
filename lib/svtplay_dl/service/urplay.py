@@ -46,16 +46,19 @@ class Urplay(Service, OpenGraphThumbMixin):
         if "streamer" in jsondata["streaming_config"]:
             basedomain = jsondata["streaming_config"]["streamer"]["redirect"]
         else:
-            lbjson = self.http.request("get", jsondata["streaming_config"]["loadbalancer"]).text
+            url = jsondata["streaming_config"]["loadbalancer"]
+            if url[:1] == "/":
+                url = "https:{}".format(url)
+            lbjson = self.http.request("get", url).text
             lbjson = json.loads(lbjson)
             basedomain = lbjson["redirect"]
-        http = "http://%s/%s" % (basedomain, jsondata["file_http"])
+        http = "https://{0}/{1}".format(basedomain, jsondata["file_http"])
         hd = None
         if len(jsondata["file_http_hd"]) > 0:
-            http_hd = "http://%s/%s" % (basedomain, jsondata["file_http_hd"])
-            hls_hd = "%s%s" % (http_hd, jsondata["streaming_config"]["http_streaming"]["hls_file"])
+            http_hd = "https://{0}/{1}".format(basedomain, jsondata["file_http_hd"])
+            hls_hd = "{0}{1}".format(http_hd, jsondata["streaming_config"]["http_streaming"]["hls_file"])
             hd = True
-        hls = "%s%s" % (http, jsondata["streaming_config"]["http_streaming"]["hls_file"])
+        hls = "{0}{1}".format(http, jsondata["streaming_config"]["http_streaming"]["hls_file"])
         streams = hlsparse(self.options, self.http.request("get", hls), hls)
         for n in list(streams.keys()):
             yield streams[n]
@@ -72,11 +75,12 @@ class Urplay(Service, OpenGraphThumbMixin):
             data = self.get_urldata()
             match = re.search('data-limit="[^"]+" href="([^"]+)"', data)
             if match:
-                res = self.http.get(urljoin("http://urskola.se", match.group(1)))
+                res = self.http.get(urljoin("https://urskola.se", match.group(1)))
                 data = res.text
-            tags = re.findall('<a class="puff tv video" title="[^"]+" href="([^"]+)"', data)
+            tags = re.findall('<a class="puff program tv video" title="[^"]+" href="([^"]+)"', data)
+            print(tags)
             for i in tags:
-                url = urljoin("http://urskola.se/", i)
+                url = urljoin("https://urskola.se/", i)
                 if url not in episodes:
                     episodes.append(url)
         else:
@@ -89,7 +93,7 @@ class Urplay(Service, OpenGraphThumbMixin):
             for i in all_links:
                 match = re.search("/program/\d+-(\w+)-", i)
                 if match and match.group(1) == keyword:
-                    episodes.append(urljoin("http://urplay.se/", i))
+                    episodes.append(urljoin("https://urplay.se/", i))
 
         episodes_new = []
         n = 0

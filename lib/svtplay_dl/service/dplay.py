@@ -22,6 +22,7 @@ class Dplay(Service):
     def get(self):
         data = self.get_urldata()
         premium = False
+        channel = False
         parse = urlparse(self.url)
         domain = re.search(r"(dplay\.\w\w)", parse.netloc).group(1)
 
@@ -29,12 +30,16 @@ class Dplay(Service):
         if not match:
             match = re.search(r'data-video-id="([^"]+)"', data)
             if not match:
-                yield ServiceError("Can't find video id")
-                return
+                match = re.search(r'page-id-(\d+) ', data)
+                if not match:
+                    yield ServiceError("Can't find video id")
+                    return
+                channel = True
+                self.options.live = True
         vid = match.group(1)
-        data = self.http.request("get", "http://%s/api/v2/ajax/videos?video_id=%s" % (parse.netloc, vid)).text
+        data = self.http.request("get", "http://{0}/api/v2/ajax/videos?video_id={1}".format(parse.netloc, vid)).text
         dataj = json.loads(data)
-        if dataj["data"] is None:
+        if not channel and dataj["data"] is None:
             yield ServiceError("Cant find video. wrong url without video?")
             return
         if self.options.username and self.options.password:
@@ -43,56 +48,58 @@ class Dplay(Service):
                 yield ServiceError("Wrong username or password")
                 return
 
-        what = self._playable(dataj["data"][0], premium)
-        if what == 1:
-            yield ServiceError("Premium content")
-            return
-        if what == 2:
-            yield ServiceError("DRM protected. Can't do anything")
-            return
-
-        if self.options.output_auto:
-            directory = os.path.dirname(self.options.output)
-            self.options.service = "dplay"
-            name = self._autoname(dataj)
-            if name is None:
-                yield ServiceError("Cant find vid id for autonaming")
+        if not channel:
+            what = self._playable(dataj["data"][0], premium)
+            if what == 1:
+                yield ServiceError("Premium content")
                 return
-            title = "%s-%s-%s" % (name, vid, self.options.service)
-            if len(directory):
-                self.options.output = os.path.join(directory, title)
-            else:
-                self.options.output = title
+            if what == 2:
+                yield ServiceError("DRM protected. Can't do anything")
+                return
+
+            if self.options.output_auto:
+                directory = os.path.dirname(self.options.output)
+                self.options.service = "dplay"
+                name = self._autoname(dataj)
+                if name is None:
+                    yield ServiceError("Cant find vid id for autonaming")
+                    return
+                title = "{0}-{1}-{2}".format(name, vid, self.options.service)
+                if len(directory):
+                    self.options.output = os.path.join(directory, title)
+                else:
+                    self.options.output = title
 
         if self.exclude():
             yield ServiceError("Excluding video")
             return
 
-        subt = "subtitles_%s_srt" % self._country2lang()
-        suburl = dataj["data"][0][subt]
-        if len(suburl) > 0:
-            yield subtitle(copy.copy(self.options), "raw", suburl)
+        if not channel:
+            subt = "subtitles_{0}_srt".format(self._country2lang())
+            suburl = dataj["data"][0][subt]
+            if len(suburl) > 0:
+                yield subtitle(copy.copy(self.options), "raw", suburl)
 
-        data = self.http.request("get", "http://geo.%s/geo.js" % domain).text
+        data = self.http.request("get", "http://geo.{0}/geo.js".format(domain)).text
         dataj = json.loads(data)
         geo = dataj["countryCode"]
         timestamp = (int(time.time())+3600)*1000
-        cookie = {"dsc-geo": quote('{"countryCode":"%s","expiry":%s}' % (geo, timestamp))}
+        cookie = {"dsc-geo": quote('{{"countryCode":"{0}","expiry":{1}}}'.format(geo, timestamp))}
         if self.options.cookies:
             self.options.cookies.update(cookie)
         else:
             self.options.cookies = cookie
-        data = self.http.request("get", "https://secure.%s/secure/api/v2/user/authorization/stream/%s?stream_type=hds" % (domain, vid), cookies=self.options.cookies)
+        data = self.http.request("get", "https://secure.{0}/secure/api/v2/user/authorization/stream/{1}?stream_type=hds".format(domain, vid), cookies=self.options.cookies)
         if data.status_code == 403 or data.status_code == 401:
             yield ServiceError("Geoblocked video")
             return
         dataj = json.loads(data.text)
-        if "hds" in dataj:
+        if not channel and "hds" in dataj:
             streams = hdsparse(copy.copy(self.options), self.http.request("get", dataj["hds"], params={"hdcore": "3.8.0"}), dataj["hds"])
             if streams:
                 for n in list(streams.keys()):
                     yield streams[n]
-        data = self.http.request("get", "https://secure.%s/secure/api/v2/user/authorization/stream/%s?stream_type=hls" % (domain, vid), cookies=self.options.cookies)
+        data = self.http.request("get", "https://secure.{0}/secure/api/v2/user/authorization/stream/{1}?stream_type=hls".format(domain, vid), cookies=self.options.cookies)
         dataj = json.loads(data.text)
         if "hls" in dataj:
             streams = hlsparse(self.options, self.http.request("get", dataj["hls"]), dataj["hls"])
@@ -116,11 +123,11 @@ class Dplay(Service):
     def _login(self, options):
         parse = urlparse(self.url)
         domain = re.search(r"(dplay\.\w\w)", parse.netloc).group(1)
-        data = self.http.request("get", "https://secure.%s/login/" % domain, cookies={})
+        data = self.http.request("get", "https://secure.{0}/login/".format(domain), cookies={})
         options.cookies = data.cookies
         match = re.search('realm_code" value="([^"]+)"', data.text)
         postdata = {"username" : options.username, "password": options.password, "remember_me": "true", "realm_code": match.group(1)}
-        data = self.http.request("post", "https://secure.%s/secure/api/v1/user/auth/login" % domain, data=postdata, cookies=options.cookies)
+        data = self.http.request("post", "https://secure.{0}/secure/api/v1/user/auth/login".format(domain), data=postdata, cookies=options.cookies)
         if data.status_code == 200:
             options.cookies = data.cookies
             return True
@@ -160,10 +167,10 @@ class Dplay(Service):
         if options.username and options.password:
             premium = self._login(options)
 
-        url = "http://www.%s/api/v2/ajax/shows/%s/seasons/?items=9999999&sort=episode_number_desc&page=" % (domain, match.group(1))
+        url = "http://www.{0}/api/v2/ajax/shows/{1}/seasons/?items=9999999&sort=episode_number_desc&page=".format(domain, match.group(1))
         episodes = []
         page = 0
-        data = self.http.request("get", "%s%s" % (url, page)).text
+        data = self.http.request("get", "{0}{1}".format(url, page)).text
         dataj = json.loads(data)
         for i in dataj["data"]:
             what = self._playable(i, premium)
@@ -171,7 +178,7 @@ class Dplay(Service):
                 episodes.append(i["url"])
         pages = dataj["total_pages"]
         for n in range(1, pages):
-            data = self.http.request("get", "%s%s" % (url, n)).text
+            data = self.http.request("get", "{0}{1}".format(url, n)).text
             dataj = json.loads(data)
             for i in dataj["data"]:
                 what = self._playable(i, premium)

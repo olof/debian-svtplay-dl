@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from __future__ import unicode_literals
 import re
 import copy
 import os
@@ -23,7 +24,7 @@ class Cmore(Service):
             yield ServiceError(message)
             return
         res = self.http.get(self.url)
-        match = re.search('data-asset-splash-section data-asset-id="([^"]+)"', res.text)
+        match = re.search('data-asset-id="([^"]+)"', res.text)
         if not match:
             yield ServiceError("Can't find video id")
             return
@@ -38,7 +39,7 @@ class Cmore(Service):
             if basename is None:
                 yield ServiceError("Cant find vid id for autonaming")
                 return
-            title = "%s-%s-%s" % (basename, match.group(1), self.options.service)
+            title = "{0}-{1}-{2}".format(basename, match.group(1), self.options.service)
             title = filenamify(title)
             if len(directory):
                 self.options.output = os.path.join(directory, title)

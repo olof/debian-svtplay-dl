@@ -4,7 +4,7 @@ all: svtplay-dl
         release clean_releasedir $(RELEASE_DIR)
 
 # These variables describe the latest release:
-VERSION = 1.9.6
+VERSION = 1.9.7
 LATEST_RELEASE = $(VERSION)
 
 # If we build a new release, this is what it will be called:
@@ -43,7 +43,7 @@ install: svtplay-dl $(MANFILE)
 
 svtplay-dl: $(PYFILES)
 	$(MAKE) -C lib
-	mv lib/svtplay-dl .
+	mv -f lib/svtplay-dl .
 
 svtplay-dl.1: svtplay-dl.pod
 	rm -f $@

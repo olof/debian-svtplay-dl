@@ -46,23 +46,27 @@ from svtplay_dl.service.riksdagen import Riksdagen
 from svtplay_dl.service.ruv import Ruv
 from svtplay_dl.service.raw import Raw
 from svtplay_dl.service.solidtango import Solidtango
+from svtplay_dl.service.sportlib import Sportlib
 from svtplay_dl.service.sr import Sr
 from svtplay_dl.service.svt import Svt
+from svtplay_dl.service.barnkanalen import Barnkanalen
 from svtplay_dl.service.svtplay import Svtplay
 from svtplay_dl.service.tv4play import Tv4play
 from svtplay_dl.service.urplay import Urplay
 from svtplay_dl.service.vg import Vg
 from svtplay_dl.service.viaplay import Viaplay
 from svtplay_dl.service.viasatsport import Viasatsport
+from svtplay_dl.service.vidme import Vidme
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "1.9.6"
+__version__ = "1.9.7"
 
 sites = [
     Aftonbladet,
     Aftonbladettv,
     Bambuser,
+    Barnkanalen,
     Bigbrother,
     Cmore,
     Dbtv,
@@ -87,6 +91,7 @@ sites = [
     Ruv,
     Radioplay,
     Solidtango,
+    Sportlib,
     Sr,
     Svt,
     Svtplay,
@@ -95,6 +100,7 @@ sites = [
     Urplay,
     Viaplay,
     Viasatsport,
+    Vidme,
     Vimeo,
     Vg,
     Youplay,
@@ -128,6 +134,7 @@ class Options(object):
         self.output = None
         self.resume = False
         self.live = False
+        self.capture_time = -1
         self.silent = False
         self.force = False
         self.quality = 0
@@ -158,6 +165,7 @@ class Options(object):
         self.stream_prio = None
         self.remux = False
         self.silent_semi = False
+        self.proxy = None
 
 def get_multiple_media(urls, options):
     if options.output and os.path.isfile(options.output):
@@ -179,6 +187,8 @@ def get_media(url, options):
 
     if options.silent_semi:
         options.silent = True
+    if options.verbose:
+        log.debug("version: {0}".format( __version__))
     stream = service_handler(sites, options, url)
     if not stream:
         generic = Generic(options, url)
@@ -257,7 +267,6 @@ def get_one_media(stream, options):
                 error.append(i)
     except Exception as e:
         if options.verbose:
-            log.error("version: %s" % __version__)
             raise
         else:
             log.error("svtplay-dl crashed")
@@ -303,8 +312,8 @@ def get_one_media(stream, options):
     if options.merge_subtitle and not options.subtitle:
         options_subs_dl(subfixes)
 
-
-    if len(videos) == 0:
+    if not videos:
+        log.error("No videos found.")
         for exc in error:
             log.error(str(exc))
     else:
@@ -378,6 +387,8 @@ def main():
     parser.add_option("-l", "--live",
                       action="store_true", dest="live", default=False,
                       help="enable for live streams (RTMP based ones)")
+    parser.add_option("-c", "--capture_time", default=-1, type=int, metavar = "capture_time",
+                      help = "define capture time in minutes of a live stream")
     parser.add_option("-s", "--silent",
                       action="store_true", dest="silent", default=False,
                       help="be less verbose")
@@ -440,7 +451,11 @@ def main():
     parser.add_option("--cmore-operatorlist", dest="cmoreoperatorlist", default=False, action="store_true",
                       help="show operatorlist for cmore")
     parser.add_option("--cmore-operator", dest="cmoreoperator", default=None, metavar="operator")
-                      
+    parser.add_option("--proxy", dest="proxy", default=None,
+                      metavar="proxy", help='Use the specified HTTP/HTTPS/SOCKS proxy. To enable experimental '
+                                            'SOCKS proxy, specify a proper scheme. For example '
+                                            'socks5://127.0.0.1:1080/.')
+
     (options, args) = parser.parse_args()
     if not args:
         parser.print_help()
@@ -466,6 +481,11 @@ def main():
         c.operatorlist()
         sys.exit(0)
 
+    if options.proxy:
+        options.proxy = options.proxy.replace("socks5", "socks5h", 1)
+        options.proxy = dict(http=options.proxy,
+                             https=options.proxy)
+
     if options.flexibleq and not options.quality:
         log.error("flexible-quality requires a quality")
         sys.exit(4)
@@ -485,6 +505,7 @@ def mergeParserOption(options, parser):
     options.output = parser.output
     options.resume = parser.resume
     options.live = parser.live
+    options.capture_time = parser.capture_time
     options.silent = parser.silent
     options.force = parser.force
     options.quality = parser.quality
@@ -514,4 +535,5 @@ def mergeParserOption(options, parser):
     options.include_clips = parser.include_clips
     options.cmoreoperatorlist = parser.cmoreoperatorlist
     options.cmoreoperator = parser.cmoreoperator
+    options.proxy = parser.proxy
     return options
