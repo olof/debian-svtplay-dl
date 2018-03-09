@@ -6,13 +6,14 @@ import os
 import re
 import copy
 import time
-import datetime
+from datetime import datetime, timedelta
 
 from svtplay_dl.output import progressbar, progress_stream, ETA, output
 from svtplay_dl.log import log
 from svtplay_dl.error import UIException, ServiceError
 from svtplay_dl.fetcher import VideoRetriever
-from svtplay_dl.utils import HTTP
+from svtplay_dl.utils.urllib import urljoin
+from svtplay_dl.subtitle import subtitle
 
 
 class HLSException(UIException):
@@ -35,8 +36,8 @@ def _get_full_url(url, srcurl):
         return "{0}{1}".format(baseurl.group(1), url)
 
     # remove everything after last / in the path of the URL
-    baseurl = re.sub(r'^([^\?]+)/[^/]*(\?.*)?$', r'\1', srcurl)
-    returl = "{0}/{1}".format(baseurl, url)
+    baseurl = re.sub(r'^([^\?]+)/[^/]*(\?.*)?$', r'\1/', srcurl)
+    returl = urljoin(baseurl, url)
 
     return returl
 
@@ -51,32 +52,52 @@ def hlsparse(options, res, url, **kwargs):
         streams[0] = ServiceError("Can't read HLS playlist. {0}".format(res.status_code))
         return streams
     m3u8 = M3U8(res.text)
-    http = HTTP(options)
+
     keycookie = kwargs.pop("keycookie", None)
+    authorization = kwargs.pop("authorization", None)
+    httpobject = kwargs.pop("httpobject", None)
 
     media = {}
-    for i in m3u8.master_playlist:
-        audio_url = None
-        if i["TAG"] == "EXT-X-MEDIA":
-            if "DEFAULT" in i and (i["DEFAULT"].upper() == "YES"):
-                if i["TYPE"] and ("URI" in i):
-                    if i["GROUP-ID"] not in media:
-                        media[i["GROUP-ID"]] = []
-                    media[i["GROUP-ID"]].append(i["URI"])
-            continue
-        elif i["TAG"] == "EXT-X-STREAM-INF":
-            bit_rate = float(i["BANDWIDTH"]) / 1000
+    segments = None
 
-            if "AUDIO" in i and (i["AUDIO"] in media):
-                audio_url = media[i["AUDIO"]][0]
+    if m3u8.master_playlist:
+        for i in m3u8.master_playlist:
+            audio_url = None
+            subtitle_url = None
+            if i["TAG"] == "EXT-X-MEDIA":
+                if "AUTOSELECT" in i and (i["AUTOSELECT"].upper() == "YES"):
+                    if i["TYPE"]:
+                        if "URI" in i:
+                            if segments is None:
+                                segments = True
+                            if i["GROUP-ID"] not in media:
+                                media[i["GROUP-ID"]] = []
+                            media[i["GROUP-ID"]].append(i["URI"])
+                        else:
+                            segments = False
+                continue
+            elif i["TAG"] == "EXT-X-STREAM-INF":
+                bit_rate = float(i["BANDWIDTH"]) / 1000
 
-            urls = _get_full_url(i["URI"], url)
-        else:
-            continue # Needs to be changed to utilise other tags.
-        res2 = http.get(urls, cookies=res.cookies)
-        if res2.status_code < 400:
+                if "AUDIO" in i and (i["AUDIO"] in media):
+                    audio_url = _get_full_url(media[i["AUDIO"]][0], url)
+                if "SUBTITLES" in i and (i["SUBTITLES"] in media):
+                    subtitle_url = _get_full_url(media[i["SUBTITLES"]][0], url)
+                urls = _get_full_url(i["URI"], url)
+            else:
+                continue  # Needs to be changed to utilise other tags.
+            options.segments = bool(segments)
+            if subtitle_url and httpobject:
+                m3u8s = M3U8(httpobject.request("get", subtitle_url, cookies=res.cookies).text)
+                streams[1] = subtitle(copy.copy(options), "wrst", _get_full_url(m3u8s.media_segment[0]["URI"], url))
+            streams[int(bit_rate)] = HLS(copy.copy(options), urls, bit_rate, cookies=res.cookies, keycookie=keycookie, authorization=authorization, audio=audio_url)
 
-            streams[int(bit_rate)] = HLS(copy.copy(options), urls, bit_rate, cookies=res.cookies, keycookie=keycookie, audio=audio_url)
+    elif m3u8.media_segment:
+        streams[0] = HLS(copy.copy(options), url, 0, cookies=res.cookies, keycookie=keycookie, authorization=authorization)
+
+    else:
+        streams[0] = ServiceError("Can't find HLS playlist in m3u8 file.")
+
     return streams
 
 
@@ -86,27 +107,18 @@ class HLS(VideoRetriever):
 
     def download(self):
 
-        if self.audio:
-            if self.options.live:
-                raise LiveHLSException(self.url)
+        if self.options.segments:
+            if self.audio:
+                self._download(self.audio, file_name=(copy.copy(self.options), "m4a"))
+            self._download(self.url, file_name=(self.options, "mp4"))
 
-            cookies = self.kwargs["cookies"]
-            audio_data_m3u = self.http.request("get", self.audio, cookies=cookies).text
-            audio_m3u8 = M3U8(audio_data_m3u)
-            total_size = audio_m3u8.media_segment[-1]["EXT-X-BYTERANGE"]["n"] + audio_m3u8.media_segment[-1]["EXT-X-BYTERANGE"]["o"]
-            self._download_url(audio_m3u8.media_segment[0]["URI"], audio=True, total_size=total_size)
-
-            data_m3u = self.http.request("get", self.url, cookies=cookies).text
-            m3u8 = M3U8(data_m3u)
-            total_size = m3u8.media_segment[-1]["EXT-X-BYTERANGE"]["n"] + m3u8.media_segment[-1]["EXT-X-BYTERANGE"]["o"]
-            self._download_url(m3u8.media_segment[0]["URI"], total_size=total_size)
         else:
-            self._download()
+            self._download(self.url, file_name=(self.options, "ts"))
 
-    def _download(self):
+    def _download(self, url, file_name):
         cookies = self.kwargs["cookies"]
         start_time = time.time()
-        m3u8 = M3U8(self.http.request("get", self.url, cookies=cookies).text)
+        m3u8 = M3U8(self.http.request("get", url, cookies=cookies).text)
         key = None
 
         if m3u8.encrypted:
@@ -116,22 +128,26 @@ class HLS(VideoRetriever):
                 log.error("You need to install pycrypto to download encrypted HLS streams")
                 sys.exit(2)
 
-        file_d = output(self.options, "ts")
+        file_d = output(file_name[0], file_name[1])
         if file_d is None:
             return
 
         decryptor = None
         size_media = len(m3u8.media_segment)
         eta = ETA(size_media)
+        total_duration = 0
         duration = 0
+        max_duration = 0
         for index, i in enumerate(m3u8.media_segment):
             if "duration" in i["EXTINF"]:
-                duration += i["EXTINF"]["duration"]
-            item = _get_full_url(i["URI"], self.url)
+                duration = i["EXTINF"]["duration"]
+                max_duration = max(max_duration, duration)
+                total_duration += duration
+            item = _get_full_url(i["URI"], url)
 
             if not self.options.silent:
                 if self.options.live:
-                    progressbar(size_media, index + 1, ''.join(['DU: ', str(datetime.timedelta(seconds=int(duration)))]))
+                    progressbar(size_media, index + 1, ''.join(['DU: ', str(timedelta(seconds=int(total_duration)))]))
                 else:
                     eta.increment()
                     progressbar(size_media, index + 1, ''.join(['ETA: ', str(eta)]))
@@ -141,15 +157,18 @@ class HLS(VideoRetriever):
                 break
             data = data.content
             if m3u8.encrypted:
+                headers = {}
                 if self.keycookie:
                     keycookies = self.keycookie
                 else:
                     keycookies = cookies
+                if self.authorization:
+                    headers["authorization"] = self.authorization
 
                 # Update key/decryptor
                 if "EXT-X-KEY" in i:
-                    keyurl = _get_full_url(i["EXT-X-KEY"]["URI"], self.url)
-                    key = self.http.request("get", keyurl, cookies=keycookies).content
+                    keyurl = _get_full_url(i["EXT-X-KEY"]["URI"], url)
+                    key = self.http.request("get", keyurl, cookies=keycookies, headers=headers).content
                     decryptor = AES.new(key, AES.MODE_CBC, os.urandom(16))
 
                 if decryptor:
@@ -159,25 +178,41 @@ class HLS(VideoRetriever):
 
             file_d.write(data)
 
-            if (self.options.capture_time > 0) and duration >= (self.options.capture_time * 60):
+            if (self.options.capture_time > 0) and total_duration >= (self.options.capture_time * 60):
                 break
 
             if (size_media == (index + 1)) and self.options.live:
-                while (start_time + i["EXTINF"]["duration"] * 2) >= time.time():
-                    time.sleep(1.0)
+                sleep_int = (start_time + max_duration * 2) - time.time()
+                if sleep_int > 0:
+                    time.sleep(sleep_int)
 
-                start_time = time.time()
-                new_m3u8 = M3U8(self.http.request("get", self.url, cookies=cookies).text)
-                for n_m3u in new_m3u8.media_segment:
-                    if n_m3u not in m3u8.media_segment:
-                        m3u8.media_segment.append(n_m3u)
+                size_media_old = size_media
+                while size_media_old == size_media:
+                    start_time = time.time()
 
-                size_media = len(m3u8.media_segment)
+                    if self.options.hls_time_stamp:
+
+                        end_time_stamp = (datetime.utcnow() - timedelta(seconds=max_duration * 2)).replace(microsecond=0)
+                        start_time_stamp = end_time_stamp - timedelta(minutes=1)
+
+                        base_url = url.split(".m3u8")[0]
+                        url = "{0}.m3u8?in={1}&out={2}?".format(base_url, start_time_stamp.isoformat(), end_time_stamp.isoformat())
+
+                    new_m3u8 = M3U8(self.http.request("get", url, cookies=cookies).text)
+                    for n_m3u in new_m3u8.media_segment:
+                        if not any(d["URI"] == n_m3u["URI"] for d in m3u8.media_segment):
+                            m3u8.media_segment.append(n_m3u)
+
+                    size_media = len(m3u8.media_segment)
+
+                    if size_media_old == size_media:
+                        time.sleep(max_duration)
 
         file_d.close()
         if not self.options.silent:
             progress_stream.write('\n')
         self.finished = True
+
 
 class M3U8():
     # Created for hls version <=7
@@ -202,12 +237,13 @@ class M3U8():
         self.master_playlist = []
 
         self.encrypted = False
+        self.independent_segments = False
 
         self.parse_m3u(data)
 
     def __str__(self):
-        return "Version: {0}\nMedia Segment: {1}\nMedia Playlist: {2}\nMaster Playlist: {3}\nEncrypted: {4}"\
-            .format(self.version, self.media_segment, self.media_playlist, self.master_playlist, self.encrypted)
+        return "Version: {0}\nMedia Segment: {1}\nMedia Playlist: {2}\nMaster Playlist: {3}\nEncrypted: {4}\tIndependent_segments: {5}"\
+            .format(self.version, self.media_segment, self.media_playlist, self.master_playlist, self.encrypted, self.independent_segments)
 
     def parse_m3u(self, data):
         if not data.startswith("#EXTM3U"):
@@ -320,7 +356,7 @@ class M3U8():
                         info = _get_tuple_attribute(attr)
                         if "BANDWIDTH" not in info:
                             raise ValueError("Can't find 'BANDWIDTH' in 'EXT-X-STREAM-INF'")
-                        info["URI"] = lines[index+1]
+                        info["URI"] = lines[index + 1]
 
                     # 4.3.4.3.  EXT-X-I-FRAME-STREAM-INF
                     elif tag == "EXT-X-I-FRAME-STREAM-INF":
@@ -344,7 +380,7 @@ class M3U8():
                     tag_type = M3U8.TAG_TYPES["MEDIA_PLAYLIST"]
                     # 4.3.5.1. EXT-X-INDEPENDENT-SEGMENTS
                     if tag == "EXT-X-INDEPENDENT-SEGMENTS":
-                        pass
+                        self.independent_segments = True
 
                     # 4.3.5.2. EXT-X-START
                     elif tag == "EXT-X-START":
@@ -378,7 +414,7 @@ def _get_tag_attribute(line):
     try:
         search_line = re.search("^([A-Z\-]*):(.*)", line)
         return search_line.group(1), search_line.group(2)
-    except:
+    except Exception:
         return line, None
 
 

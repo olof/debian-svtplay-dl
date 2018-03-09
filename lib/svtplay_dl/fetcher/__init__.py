@@ -4,6 +4,7 @@ import copy
 from svtplay_dl.output import progress_stream, output, ETA, progressbar
 from svtplay_dl.utils import HTTP
 
+
 class VideoRetriever(object):
     def __init__(self, options, url, bitrate=0, **kwargs):
         self.options = options
@@ -15,6 +16,7 @@ class VideoRetriever(object):
         self.audio = kwargs.pop("audio", None)
         self.files = kwargs.pop("files", None)
         self.keycookie = kwargs.pop("keycookie", None)
+        self.authorization = kwargs.pop("authorization", None)
 
     def __repr__(self):
         return "<Video(fetcher=%s, bitrate=%s>" % (self.__class__.__name__, self.bitrate)
@@ -28,7 +30,7 @@ class VideoRetriever(object):
         if not total_size:
             try:
                 total_size = data.headers['Content-Range']
-                total_size = total_size[total_size.find("/")+1:]
+                total_size = total_size[total_size.find("/") + 1:]
                 total_size = int(total_size)
             except KeyError:
                 raise KeyError("Can't get the total size.")
@@ -61,4 +63,3 @@ class VideoRetriever(object):
         progressbar(bytes_so_far, total_size, "ETA: complete")
         progress_stream.write('\n')
         self.finished = True
-

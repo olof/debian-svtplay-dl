@@ -3,10 +3,10 @@
 from __future__ import absolute_import
 import re
 import os
-import xml.etree.ElementTree as ET
 import copy
 import json
 import hashlib
+from operator import itemgetter
 
 from svtplay_dl.log import log
 from svtplay_dl.service import Service, OpenGraphThumbMixin
@@ -19,6 +19,7 @@ from svtplay_dl.subtitle import subtitle
 from svtplay_dl.error import ServiceError
 
 URL_VIDEO_API = "http://api.svt.se/videoplayer-api/video/"
+
 
 class Svtplay(Service, OpenGraphThumbMixin):
     supported_domains = ['svtplay.se', 'svt.se', 'beta.svtplay.se', 'svtflow.se']
@@ -118,9 +119,12 @@ class Svtplay(Service, OpenGraphThumbMixin):
                 elif i["format"] == "hds":
                     match = re.search(r"\/se\/secure\/", i["url"])
                     if not match:
-                        streams = hdsparse(self.options, self.http.request("get", i["url"], params={"hdcore": "3.7.0"}), i["url"])
+                        streams = hdsparse(self.options, self.http.request("get", i["url"], params={"hdcore": "3.7.0"}),
+                                           i["url"])
                         if alt:
-                            alt_streams = hdsparse(self.options, self.http.request("get", alt.request.url, params={"hdcore": "3.7.0"}), alt.request.url)
+                            alt_streams = hdsparse(self.options, self.http.request("get", alt.request.url,
+                                                                                   params={"hdcore": "3.7.0"}),
+                                                   alt.request.url)
                 elif i["format"] == "dash264" or i["format"] == "dashhbbtv":
                     streams = dashparse(self.options, self.http.request("get", i["url"]), i["url"])
                     if alt:
@@ -183,21 +187,22 @@ class Svtplay(Service, OpenGraphThumbMixin):
                 videos = self._genre(dataj)
             else:
                 if parse.query:
-                    match = re.search("tab=(.+)", parse.query)
-                    if match:
-                        tab = match.group(1)
+                    query = parse_qs(parse.query)
+                    if "tab" in query:
+                        tab = query["tab"][0]
 
-                items = dataj["relatedVideoContent"]["relatedVideosAccordion"]
-                for i in items:
-                    if tab:
-                        if i["slug"] == tab:
-                            videos = self.videos_to_list(i["videos"], videos)
-                    else:
-                        if "klipp" not in i["slug"] and "kommande" not in i["slug"]:
-                            videos = self.videos_to_list(i["videos"], videos)
-                    if self.options.include_clips:
-                        if i["slug"] == "klipp":
-                            videos = self.videos_to_list(i["videos"], videos)
+                if dataj["relatedVideoContent"]:
+                    items = dataj["relatedVideoContent"]["relatedVideosAccordion"]
+                    for i in items:
+                        if tab:
+                            if i["slug"] == tab:
+                                videos = self.videos_to_list(i["videos"], videos)
+                        else:
+                            if "klipp" not in i["slug"] and "kommande" not in i["slug"]:
+                                videos = self.videos_to_list(i["videos"], videos)
+                        if self.options.include_clips:
+                            if i["slug"] == "klipp":
+                                videos = self.videos_to_list(i["videos"], videos)
 
         episodes = [urljoin("http://www.svtplay.se", x) for x in videos]
 
@@ -206,6 +211,8 @@ class Svtplay(Service, OpenGraphThumbMixin):
         return episodes
 
     def videos_to_list(self, lvideos, videos):
+        if "episodeNumber" in lvideos[0] and lvideos[0]["episodeNumber"]:
+            lvideos = sorted(lvideos, key=itemgetter('episodeNumber'))
         for n in lvideos:
             parse = urlparse(n["contentUrl"])
             if parse.path not in videos:
@@ -215,7 +222,7 @@ class Svtplay(Service, OpenGraphThumbMixin):
             if "versions" in n:
                 for i in n["versions"]:
                     parse = urlparse(i["contentUrl"])
-                    filename = "" # output is None here.
+                    filename = ""  # output is None here.
                     if "accessService" in i:
                         if i["accessService"] == "audioDescription":
                             filename += "-syntolkat"

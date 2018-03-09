@@ -32,17 +32,19 @@ FIREFOX_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/537.36
 
 # TODO: should be set as the default option in the argument parsing?
 DEFAULT_PROTOCOL_PRIO = ["dash", "hls", "hds", "http", "rtmp"]
+LIVE_PROTOCOL_PRIO = ["hls", "dash", "hds", "http", "rtmp"]
 
 log = logging.getLogger('svtplay_dl')
 progress_stream = sys.stderr
 
 retry = Retry(
-            total=5,
-            read=5,
-            connect=5,
-            backoff_factor=0.3,
-            status_forcelist=(500, 502, 504),
-        )
+    total=5,
+    read=5,
+    connect=5,
+    backoff_factor=0.3,
+    status_forcelist=(500, 502, 504)
+)
+
 
 class HTTP(Session):
     def __init__(self, options, *args, **kwargs):
@@ -86,6 +88,7 @@ def list_quality(videos):
     for i in data:
         log.info("%s\t%s", i[0], i[1].upper())
 
+
 def protocol_prio(streams, priolist):
     """
     Given a list of VideoRetriever objects and a prioritized list of
@@ -95,15 +98,14 @@ def protocol_prio(streams, priolist):
     """
     # Map score's to the reverse of the list's index values
     proto_score = dict(zip(priolist, range(len(priolist), 0, -1)))
-    log.debug("Protocol priority scores (higher is better): %s",
-        str(proto_score))
+    log.debug("Protocol priority scores (higher is better): %s", str(proto_score))
 
     # Build a tuple (bitrate, proto_score, stream), and use it
     # for sorting.
     prioritized = [(s.bitrate, proto_score[s.name()], s) for
                    s in streams if s.name() in proto_score]
-    return [x[2] for
-            x in sorted(prioritized, key=itemgetter(0,1), reverse=True)]
+    return [x[2] for x in sorted(prioritized, key=itemgetter(0, 1), reverse=True)]
+
 
 def select_quality(options, streams):
     high = 0
@@ -132,9 +134,13 @@ def select_quality(options, streams):
 
     # Extract protocol prio, in the form of "hls,hds,http,rtmp",
     # we want it as a list
-    proto_prio = DEFAULT_PROTOCOL_PRIO
+
     if options.stream_prio:
         proto_prio = options.stream_prio.split(',')
+    elif options.live or streams[0].options.live:
+        proto_prio = LIVE_PROTOCOL_PRIO
+    else:
+        proto_prio = DEFAULT_PROTOCOL_PRIO
 
     # Filter away any unwanted protocols, and prioritize
     # based on --stream-priority.
@@ -150,7 +156,7 @@ def select_quality(options, streams):
     # is the stream with the highest priority protocol.
     stream_hash = {}
     for s in streams:
-        if not s.bitrate in stream_hash:
+        if s.bitrate not in stream_hash:
             stream_hash[s.bitrate] = s
 
     avail = sorted(stream_hash.keys(), reverse=True)
@@ -158,7 +164,7 @@ def select_quality(options, streams):
     # wanted_lim is a two element tuple defines lower/upper bounds
     # (inclusive). By default, we want only the best for you
     # (literally!).
-    wanted_lim = (avail[0],)*2
+    wanted_lim = (avail[0],) * 2
     if optq:
         wanted_lim = (optq - optf, optq + optf)
 
@@ -173,7 +179,15 @@ def select_quality(options, streams):
         raise error.UIException("Can't find that quality. Try one of: %s (or "
                                 "try --flexible-quality)" % quality)
 
-    return stream_hash[wanted[0]]
+    http = HTTP(options)
+    # Test if the wanted stream is available. If not try with the second best and so on.
+    for w in wanted:
+        res = http.get(stream_hash[w].url, cookies=stream_hash[w].kwargs["cookies"])
+        if res is not None and res.status_code < 400:
+            return stream_hash[w]
+
+    raise error.UIException("Streams not available to download.")
+
 
 def ensure_unicode(s):
     """
@@ -193,6 +207,7 @@ def decode_html_entities(s):
         <3 &
     """
     parser = HTMLParser.HTMLParser()
+
     def unesc(m):
         return parser.unescape(m.group())
     return re.sub(r'(&[^;]+;)', unesc, ensure_unicode(s))
