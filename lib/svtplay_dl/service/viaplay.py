@@ -49,6 +49,7 @@ class Viaplay(Service, OpenGraphThumbMixin):
             return match.group(1)
 
         clips = False
+        slug = None
         match = re.search('params":({.*}),"query', self.get_urldata())
         if match:
             jansson = json.loads(match.group(1))
@@ -77,18 +78,21 @@ class Viaplay(Service, OpenGraphThumbMixin):
                     episodenr = match.group(2)
                 else:
                     episodenr = season
+            if "slug" in jansson:
+                slug = jansson["slug"]
 
             if clips:
                 return episodenr
             else:
-                match = re.search('"ContentPageProgramStore":({.*}),"StartPageStore', self.get_urldata())
+                match = self._conentpage(self.get_urldata())
                 if match:
                     janson = json.loads(match.group(1))
                     for i in janson["format"]["videos"].keys():
                         if "program" in janson["format"]["videos"][str(i)]:
                             for n in janson["format"]["videos"][i]["program"]:
                                 if str(n["episodeNumber"]) and int(episodenr) == n["episodeNumber"] and int(season) == n["seasonNumber"]:
-                                    return n["id"]
+                                    if slug is None or slug == n["formatSlug"]:
+                                        return n["id"]
                                 elif n["id"] == episodenr:
                                     return episodenr
 
@@ -199,7 +203,7 @@ class Viaplay(Service, OpenGraphThumbMixin):
     def _grab_episodes(self, options, seasons):
         episodes = []
         baseurl = self.url
-        match = re.search("(sasong|sesong)-\d+", urlparse(self.url).path)
+        match = re.search("(saeson|sasong|sesong)-\d+", urlparse(self.url).path)
         if match:
             baseurl = self.url[:self.url.rfind("/")]
             baseurl = baseurl[:baseurl.rfind("/")]
@@ -223,11 +227,13 @@ class Viaplay(Service, OpenGraphThumbMixin):
     def _isswe(self, url):
         if re.search(".se$", urlparse(url).netloc):
             return "sasong"
+        elif re.search(".dk$", urlparse(url).netloc):
+            return "saeson"
         else:
             return "sesong"
 
     def _conentpage(self, data):
-        return re.search('"ContentPageProgramStore":({.*}),[ ]*"StartPageStore', data)
+        return re.search('"ContentPageProgramStore":({.*}),[ ]*"ApplicationStore', data)
 
     def _videos_to_list(self, url, vid, episodes):
         dataj = json.loads(self._get_video_data(vid).text)

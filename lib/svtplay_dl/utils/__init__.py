@@ -7,6 +7,7 @@ import re
 import unicodedata
 import platform
 from operator import itemgetter
+import subprocess
 
 try:
     import HTMLParser
@@ -183,7 +184,7 @@ def select_quality(options, streams):
     # Test if the wanted stream is available. If not try with the second best and so on.
     for w in wanted:
         res = http.get(stream_hash[w].url, cookies=stream_hash[w].kwargs["cookies"])
-        if res is not None and res.status_code < 400:
+        if res is not None and res.status_code < 404:
             return stream_hash[w]
 
     raise error.UIException("Streams not available to download.")
@@ -275,3 +276,13 @@ def which(program):
             if is_exe(exe_file):
                 return exe_file
     return None
+
+
+def run_program(cmd, show=True):
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    stdout, stderr = p.communicate()
+    stderr = stderr.decode('utf-8', 'replace')
+    if p.returncode != 0 and show:
+        msg = stderr.strip()
+        log.error("Something went wrong: {0}".format(msg))
+    return p.returncode, stdout, stderr
