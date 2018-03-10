@@ -29,6 +29,7 @@ else:
     def _chr(temp):
         return chr(temp)
 
+
 class HDSException(UIException):
     def __init__(self, url, message):
         self.url = url
@@ -74,11 +75,13 @@ def hdsparse(options, res, manifest):
             bootstrap["0"] = i.text
     parse = urlparse(manifest)
     querystring = parse.query
-    manifest = "%s://%s%s" % (parse.scheme, parse.netloc, parse.path)
+    url = "{0}://{1}{2}".format(parse.scheme, parse.netloc, parse.path)
     for i in mediaIter:
         bootstrapid = bootstrap[i.attrib["bootstrapInfoId"]]
-        streams[int(i.attrib["bitrate"])] = HDS(copy.copy(options), i.attrib["url"], i.attrib["bitrate"], manifest=manifest, bootstrap=bootstrapid,
-                                                metadata=i.find("{http://ns.adobe.com/f4m/1.0}metadata").text, querystring=querystring, cookies=res.cookies)
+        streams[int(i.attrib["bitrate"])] = HDS(copy.copy(options), url, i.attrib["bitrate"], url_id=i.attrib["url"],
+                                                bootstrap=bootstrapid,
+                                                metadata=i.find("{http://ns.adobe.com/f4m/1.0}metadata").text,
+                                                querystring=querystring, cookies=res.cookies)
     return streams
 
 
@@ -97,10 +100,10 @@ class HDS(VideoRetriever):
         antal = None
         if box[2] == b"abst":
             antal = readbox(bootstrap, box[0])
-        baseurl = self.kwargs["manifest"][0:self.kwargs["manifest"].rfind("/")]
+        baseurl = self.url[0:self.url.rfind("/")]
 
         file_d = output(self.options, "flv")
-        if hasattr(file_d, "read") is False:
+        if file_d is None:
             return
 
         metasize = struct.pack(">L", len(base64.b64decode(self.kwargs["metadata"])))[1:]
@@ -114,8 +117,8 @@ class HDS(VideoRetriever):
         total = antal[1]["total"]
         eta = ETA(total)
         while i <= total:
-            url = "%s/%sSeg1-Frag%s?%s" % (baseurl, self.url, start, querystring)
-            if self.options.output != "-" and not self.options.silent:
+            url = "{0}/{1}Seg1-Frag{2}?{3}".format(baseurl, self.kwargs["url_id"], start, querystring)
+            if not self.options.silent:
                 eta.update(i)
                 progressbar(total, i, ''.join(["ETA: ", str(eta)]))
             data = self.http.request("get", url, cookies=cookies)
@@ -127,12 +130,10 @@ class HDS(VideoRetriever):
             i += 1
             start += 1
 
-        if self.options.output != "-":
-            file_d.close()
-            if not self.options.silent:
-                progress_stream.write('\n')
-            self.finished = True
-
+        file_d.close()
+        if not self.options.silent:
+            progress_stream.write('\n')
+        self.finished = True
 
 
 def readbyte(data, pos):
@@ -336,4 +337,3 @@ def decode_f4f(fragID, fragData):
         tagLen &= 0x00ffffff
         start += tagLen + 11 + 4
     return start
-

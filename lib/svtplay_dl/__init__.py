@@ -6,6 +6,7 @@ import sys
 import os
 import logging
 import copy
+import re
 from optparse import OptionParser
 
 from svtplay_dl.error import UIException
@@ -18,6 +19,7 @@ from svtplay_dl.output import filename
 from svtplay_dl.postprocess import postprocess
 
 from svtplay_dl.service.aftonbladet import Aftonbladet, Aftonbladettv
+from svtplay_dl.service.atg import Atg
 from svtplay_dl.service.bambuser import Bambuser
 from svtplay_dl.service.bigbrother import Bigbrother
 from svtplay_dl.service.cmore import Cmore
@@ -26,6 +28,7 @@ from svtplay_dl.service.disney import Disney
 from svtplay_dl.service.dplay import Dplay
 from svtplay_dl.service.dr import Dr
 from svtplay_dl.service.efn import Efn
+from svtplay_dl.service.eurosport import Eurosport
 from svtplay_dl.service.expressen import Expressen
 from svtplay_dl.service.facebook import Facebook
 from svtplay_dl.service.filmarkivet import Filmarkivet
@@ -33,6 +36,7 @@ from svtplay_dl.service.flowonline import Flowonline
 from svtplay_dl.service.hbo import Hbo
 from svtplay_dl.service.twitch import Twitch
 from svtplay_dl.service.lemonwhale import Lemonwhale
+from svtplay_dl.service.mtvnn import MtvMusic
 from svtplay_dl.service.mtvnn import Mtvnn
 from svtplay_dl.service.mtvservices import Mtvservices
 from svtplay_dl.service.nhl import NHL
@@ -46,8 +50,10 @@ from svtplay_dl.service.riksdagen import Riksdagen
 from svtplay_dl.service.ruv import Ruv
 from svtplay_dl.service.raw import Raw
 from svtplay_dl.service.solidtango import Solidtango
+from svtplay_dl.service.sportlib import Sportlib
 from svtplay_dl.service.sr import Sr
 from svtplay_dl.service.svt import Svt
+from svtplay_dl.service.barnkanalen import Barnkanalen
 from svtplay_dl.service.svtplay import Svtplay
 from svtplay_dl.service.tv4play import Tv4play
 from svtplay_dl.service.urplay import Urplay
@@ -57,12 +63,14 @@ from svtplay_dl.service.viasatsport import Viasatsport
 from svtplay_dl.service.vimeo import Vimeo
 from svtplay_dl.service.youplay import Youplay
 
-__version__ = "1.9.6"
+__version__ = "1.9.10"
 
 sites = [
     Aftonbladet,
     Aftonbladettv,
+    Atg,
     Bambuser,
+    Barnkanalen,
     Bigbrother,
     Cmore,
     Dbtv,
@@ -70,6 +78,7 @@ sites = [
     Dplay,
     Dr,
     Efn,
+    Eurosport,
     Expressen,
     Facebook,
     Filmarkivet,
@@ -78,6 +87,7 @@ sites = [
     Twitch,
     Lemonwhale,
     Mtvservices,
+    MtvMusic,
     Mtvnn,
     NHL,
     Nrk,
@@ -87,6 +97,7 @@ sites = [
     Ruv,
     Radioplay,
     Solidtango,
+    Sportlib,
     Sr,
     Svt,
     Svtplay,
@@ -128,6 +139,7 @@ class Options(object):
         self.output = None
         self.resume = False
         self.live = False
+        self.capture_time = -1
         self.silent = False
         self.force = False
         self.quality = 0
@@ -158,6 +170,9 @@ class Options(object):
         self.stream_prio = None
         self.remux = False
         self.silent_semi = False
+        self.proxy = None
+        self.hls_time_stamp = False
+
 
 def get_multiple_media(urls, options):
     if options.output and os.path.isfile(options.output):
@@ -173,18 +188,21 @@ def get_multiple_media(urls, options):
     for url in urls:
         get_media(url, copy.copy(options))
 
+
 def get_media(url, options):
     if "http" not in url[:4]:
         url = "http://%s" % url
 
     if options.silent_semi:
         options.silent = True
+    if options.verbose:
+        log.debug("version: {0}".format(__version__))
     stream = service_handler(sites, options, url)
     if not stream:
         generic = Generic(options, url)
         url, stream = generic.get(sites)
     if not stream:
-        if url.find(".f4m") > 0 or url.find(".m3u8") > 0:
+        if re.search(".f4m", url) or re.search(".m3u8", url) or re.search(".mpd", url):
             stream = Raw(options, url)
         if not stream:
             log.error("That site is not supported. Make a ticket or send a message")
@@ -220,7 +238,7 @@ def get_all_episodes(stream, options, url):
             substream = service_handler(sites, copy.copy(options), o)
 
         log.info("Episode %d of %d", idx + 1, len(episodes))
-        log.info("Url: %s",o) 
+        log.info("Url: %s", o)
 
         # get_one_media overwrites options.output...
         get_one_media(substream, copy.copy(options))
@@ -257,7 +275,6 @@ def get_one_media(stream, options):
                 error.append(i)
     except Exception as e:
         if options.verbose:
-            log.error("version: %s" % __version__)
             raise
         else:
             log.error("svtplay-dl crashed")
@@ -277,7 +294,7 @@ def get_one_media(stream, options):
                     print(sub.url)
             else:
                 print(subs[0].url)
-        if options.force_subtitle: 
+        if options.force_subtitle:
             return
 
     def options_subs_dl(subfixes):
@@ -290,7 +307,7 @@ def get_one_media(stream, options):
                             subfixes += [sub.subfix]
                         else:
                             options.get_all_subtitles = False
-            else: 
+            else:
                 subs[0].download()
         elif options.merge_subtitle:
             options.merge_subtitle = False
@@ -303,8 +320,8 @@ def get_one_media(stream, options):
     if options.merge_subtitle and not options.subtitle:
         options_subs_dl(subfixes)
 
-
-    if len(videos) == 0:
+    if not videos:
+        log.error("No videos found.")
         for exc in error:
             log.error(str(exc))
     else:
@@ -332,12 +349,17 @@ def get_one_media(stream, options):
             else:
                 log.warning("Can not get thumbnail when fetching to stdout")
         post = postprocess(stream, options, subfixes)
-        if stream.name() == "dash" and post.detect:
+
+        if stream.name() == "dash" or (stream.name() == "hls" and stream.options.segments) and post.detect:
             post.merge()
-        if stream.name() == "dash" and not post.detect and stream.finished:
+        elif (stream.name() == "dash" or (stream.name() == "hls" and stream.options.segments)) and not post.detect and stream.finished:
             log.warning("Cant find ffmpeg/avconv. audio and video is in seperate files. if you dont want this use -P hls or hds")
-        if options.remux:
-            post.remux()
+        elif stream.name() == "hls" or options.remux:
+            if post.detect:
+                post.remux()
+            else:
+                log.warning("Cant find ffmpeg/avconv. File may be unplayable.")
+
         if options.silent_semi and stream.finished:
             log.log(25, "Download of %s was completed" % stream.options.output)
 
@@ -378,6 +400,8 @@ def main():
     parser.add_option("-l", "--live",
                       action="store_true", dest="live", default=False,
                       help="enable for live streams (RTMP based ones)")
+    parser.add_option("-c", "--capture_time", default=-1, type=int, metavar="capture_time",
+                      help="define capture time in minutes of a live stream")
     parser.add_option("-s", "--silent",
                       action="store_true", dest="silent", default=False,
                       help="be less verbose")
@@ -397,7 +421,8 @@ def main():
                       action="store_true", dest="subtitle", default=False,
                       help="download subtitle from the site if available")
     parser.add_option("-M", "--merge-subtitle", action="store_true", dest="merge_subtitle",
-                      default=False, help="merge subtitle with video/audio file with corresponding ISO639-3 language code. this invokes --remux automatically. use with -S for external also.")
+                      default=False, help="merge subtitle with video/audio file with corresponding ISO639-3 language code."
+                                          "this invokes --remux automatically. use with -S for external also.")
     parser.add_option("--force-subtitle", dest="force_subtitle", default=False,
                       action="store_true", help="download only subtitle if its used with -S")
     parser.add_option("--require-subtitle", dest="require_subtitle", default=False,
@@ -407,7 +432,7 @@ def main():
     parser.add_option("--raw-subtitles", dest="get_raw_subtitles", default=False, action="store_true",
                       help="also download the subtitles in their native format")
     parser.add_option("--convert-subtitle-colors", dest="convert_subtitle_colors", default=False, action="store_true",
-                        help="converts the color information in subtitles, to <font color=""> tags")
+                      help="converts the color information in subtitles, to <font color=""> tags")
     parser.add_option("-u", "--username", default=None,
                       help="username")
     parser.add_option("-p", "--password", default=None,
@@ -440,7 +465,11 @@ def main():
     parser.add_option("--cmore-operatorlist", dest="cmoreoperatorlist", default=False, action="store_true",
                       help="show operatorlist for cmore")
     parser.add_option("--cmore-operator", dest="cmoreoperator", default=None, metavar="operator")
-                      
+    parser.add_option("--proxy", dest="proxy", default=None,
+                      metavar="proxy", help='Use the specified HTTP/HTTPS/SOCKS proxy. To enable experimental '
+                                            'SOCKS proxy, specify a proper scheme. For example '
+                                            'socks5://127.0.0.1:1080/.')
+
     (options, args) = parser.parse_args()
     if not args:
         parser.print_help()
@@ -466,6 +495,11 @@ def main():
         c.operatorlist()
         sys.exit(0)
 
+    if options.proxy:
+        options.proxy = options.proxy.replace("socks5", "socks5h", 1)
+        options.proxy = dict(http=options.proxy,
+                             https=options.proxy)
+
     if options.flexibleq and not options.quality:
         log.error("flexible-quality requires a quality")
         sys.exit(4)
@@ -485,6 +519,7 @@ def mergeParserOption(options, parser):
     options.output = parser.output
     options.resume = parser.resume
     options.live = parser.live
+    options.capture_time = parser.capture_time
     options.silent = parser.silent
     options.force = parser.force
     options.quality = parser.quality
@@ -514,4 +549,5 @@ def mergeParserOption(options, parser):
     options.include_clips = parser.include_clips
     options.cmoreoperatorlist = parser.cmoreoperatorlist
     options.cmoreoperator = parser.cmoreoperator
+    options.proxy = parser.proxy
     return options

@@ -3,8 +3,7 @@ all: svtplay-dl
 .PHONY: test cover doctest pylint svtplay-dl \
         release clean_releasedir $(RELEASE_DIR)
 
-# These variables describe the latest release:
-export VERSION = 1.9.6
+export VERSION = 1.9.10
 LATEST_RELEASE = $(VERSION)
 
 # If we build a new release, this is what it will be called:
@@ -43,7 +42,7 @@ install: svtplay-dl $(MANFILE)
 
 svtplay-dl: $(PYFILES)
 	$(MAKE) -C lib
-	mv lib/svtplay-dl .
+	mv -f lib/svtplay-dl .
 
 svtplay-dl.1: svtplay-dl.pod
 	rm -f $@

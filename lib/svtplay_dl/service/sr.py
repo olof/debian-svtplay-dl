@@ -37,14 +37,14 @@ class Sr(Service, OpenGraphThumbMixin):
             yield HTTP(copy.copy(self.options), urljoin("https://sverigesradio.se", match.group(1)), 128)
             return
         else:
-            match = re.search('data-audio-type="secondary" data-audio-id="(\d+)"', data) # Ladda ner utan musik
-            match2 = re.search('data-audio-type="episode" data-audio-id="(\d+)"', data) # Ladda ner med musik
+            match = re.search('data-audio-type="episode" data-audio-id="(\d+)"', data)  # Ladda ner med musik
+            match2 = re.search('data-audio-type="secondary" data-audio-id="(\d+)"', data)  # Ladda ner utan musik
             if match:
                 aid = match.group(1)
-                type = "secondary"
+                type = "episode"
             elif match2:
                 aid = match2.group(1)
-                type = "episode"
+                type = "secondary"
             else:
                 yield ServiceError("Can't find audio info")
                 return
@@ -53,5 +53,3 @@ class Sr(Service, OpenGraphThumbMixin):
         data = self.http.request("get", dataurl).text
         playerinfo = json.loads(data)
         yield HTTP(copy.copy(self.options), playerinfo["audioUrl"], 128)
-
-

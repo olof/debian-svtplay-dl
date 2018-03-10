@@ -9,6 +9,7 @@ from svtplay_dl.error import ServiceError
 from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.utils import decode_html_entities
 
+
 class Lemonwhale(Service):
     # lemonwhale.com is just bogus for generic
     supported_domains = ['vk.se', 'lemonwhale.com']
@@ -61,6 +62,6 @@ class Lemonwhale(Service):
         videos = janson["videos"][0]["media"]["streams"]
         for i in videos:
             if i["name"] == "auto":
-                hls = "%s%s" % (janson["videos"][0]["media"]["base"], i["url"])
+                hls = "{0}{1}".format(janson["videos"][0]["media"]["base"], i["url"])
         streams = hlsparse(self.options, self.http.request("get", hls), hls)
         return streams

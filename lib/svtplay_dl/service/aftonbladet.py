@@ -6,8 +6,8 @@ import json
 
 from svtplay_dl.service import Service
 from svtplay_dl.utils import decode_html_entities
-from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.error import ServiceError
+from svtplay_dl.fetcher.hds import hdsparse
 from svtplay_dl.fetcher.hls import hlsparse
 
 
@@ -43,9 +43,9 @@ class Aftonbladettv(Service):
             for n in list(streams.keys()):
                 yield streams[n]
 
+
 class Aftonbladet(Service):
     supported_domains = ["aftonbladet.se"]
-
 
     def get(self):
         data = self.get_urldata()
@@ -59,7 +59,18 @@ class Aftonbladet(Service):
             yield ServiceError("Can't find video info")
             return
 
-        janson = json.loads(match.group(1))
+        try:
+            janson = json.loads(match.group(1))
+        except json.decoder.JSONDecodeError:
+            yield ServiceError("Can't decode api request: {0}".format(match.group(1)))
+            return
+
+        videos = self._get_video(janson)
+        for i in videos:
+            yield i
+
+    def _get_video(self, janson):
+
         articleid = janson["article"]["currentArticleId"]
         components = janson["articles"][articleid]["article"]["components"]
         for i in components:
@@ -67,7 +78,26 @@ class Aftonbladet(Service):
                 for n in i["components"]:
                     if "type" in n and n["type"] == "video":
                         streams = hlsparse(self.options, self.http.request("get", n["videoAsset"]["streamUrls"]["hls"]),
-                                               n["videoAsset"]["streamUrls"]["hls"])
+                                           n["videoAsset"]["streamUrls"]["hls"])
                         if streams:
-                            for n in list(streams.keys()):
-                                yield streams[n]
+                            for key in list(streams.keys()):
+                                yield streams[key]
+
+            if "videoAsset" in i and "streamUrls" in i["videoAsset"]:
+
+                streams = []
+                streamUrls = i["videoAsset"]["streamUrls"]
+
+                if "hls" in streamUrls:
+                    streams.append(hlsparse(self.options, self.http.request("get", streamUrls["hls"]),
+                                            streamUrls["hls"]))
+
+                if "hds" in streamUrls:
+                    streams.append(hdsparse(self.options, self.http.request("get", streamUrls["hds"],
+                                                                            params={"hdcore": "3.7.0"}),
+                                            streamUrls["hds"]))
+
+                if streams:
+                    for s in streams:
+                        for key in list(s.keys()):
+                            yield s[key]
