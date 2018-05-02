@@ -14,13 +14,10 @@ try:
 except ImportError:
     # pylint: disable-msg=import-error
     import html.parser as HTMLParser
-try:
-    from requests import Session
-    from requests.adapters import HTTPAdapter
-    from requests.packages.urllib3.util.retry import Retry
-except ImportError:
-    print("You need to install python-requests to use this script")
-    sys.exit(3)
+
+from requests import Session
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 from svtplay_dl import error
 
@@ -183,7 +180,7 @@ def select_quality(options, streams):
     http = HTTP(options)
     # Test if the wanted stream is available. If not try with the second best and so on.
     for w in wanted:
-        res = http.get(stream_hash[w].url, cookies=stream_hash[w].kwargs["cookies"])
+        res = http.get(stream_hash[w].url, cookies=stream_hash[w].kwargs.get("cookies", None))
         if res is not None and res.status_code < 404:
             return stream_hash[w]
 
