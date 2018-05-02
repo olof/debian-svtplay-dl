@@ -1,3 +1,9 @@
+svtplay-dl (1.9.11-1) unstable; urgency=medium
+
+  * New upstream version 1.9.11
+
+ -- Olof Johansson <olof@ethup.se>  Thu, 03 May 2018 00:40:00 +0200
+
 svtplay-dl (1.9.10-1) unstable; urgency=medium
 
   * New upstream version 1.9.10
