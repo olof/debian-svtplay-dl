@@ -1,7 +1,6 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import sys
 import os
 import re
 import copy
@@ -10,7 +9,6 @@ from datetime import datetime, timedelta
 import binascii
 
 from svtplay_dl.output import progressbar, progress_stream, ETA, output
-from svtplay_dl.log import log
 from svtplay_dl.error import UIException, ServiceError
 from svtplay_dl.fetcher import VideoRetriever
 from svtplay_dl.utils.urllib import urljoin
@@ -67,7 +65,7 @@ def hlsparse(options, res, url, **kwargs):
             subtitle_url = None
             if i["TAG"] == "EXT-X-MEDIA":
                 if "AUTOSELECT" in i and (i["AUTOSELECT"].upper() == "YES"):
-                    if i["TYPE"]:
+                    if i["TYPE"] and i["TYPE"] != "SUBTITLES":
                         if "URI" in i:
                             if segments is None:
                                 segments = True
@@ -118,18 +116,20 @@ class HLS(VideoRetriever):
             self._download(self.url, file_name=(self.options, "ts"))
 
     def _download(self, url, file_name):
-        cookies = self.kwargs["cookies"]
+        cookies = self.kwargs.get("cookies", None)
         start_time = time.time()
         m3u8 = M3U8(self.http.request("get", url, cookies=cookies).text)
         key = None
 
         if m3u8.encrypted:
+            from Crypto.Cipher import AES
+
+        def random_iv():
             try:
-                from Crypto.Cipher import AES
                 from Crypto import Random
+                return Random.new().read(AES.block_size)
             except ImportError:
-                log.error("You need to install pycrypto to download encrypted HLS streams")
-                sys.exit(2)
+                return os.urandom(16)
 
         file_d = output(file_name[0], file_name[1])
         if file_d is None:
@@ -172,8 +172,8 @@ class HLS(VideoRetriever):
                 if "EXT-X-KEY" in i:
                     keyurl = _get_full_url(i["EXT-X-KEY"]["URI"], url)
                     key = self.http.request("get", keyurl, cookies=keycookies, headers=headers).content
-                    vi = binascii.unhexlify(i["EXT-X-KEY"]["IV"][2:].zfill(32)) if "IV" in i["EXT-X-KEY"] else Random.new().read(AES.block_size)
-                    decryptor = AES.new(key, AES.MODE_CBC, vi)
+                    iv = binascii.unhexlify(i["EXT-X-KEY"]["IV"][2:].zfill(32)) if "IV" in i["EXT-X-KEY"] else random_iv()
+                    decryptor = AES.new(key, AES.MODE_CBC, iv)
 
                 if decryptor:
                     data = decryptor.decrypt(data)

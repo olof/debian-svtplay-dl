@@ -3,7 +3,8 @@ all: svtplay-dl
 .PHONY: test cover doctest pylint svtplay-dl \
         release clean_releasedir $(RELEASE_DIR)
 
-export VERSION = 1.9.10
+# These variables describe the latest release:
+export VERSION = 1.9.11
 LATEST_RELEASE = $(VERSION)
 
 # If we build a new release, this is what it will be called:
