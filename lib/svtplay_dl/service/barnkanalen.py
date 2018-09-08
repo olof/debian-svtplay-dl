@@ -3,11 +3,11 @@
 from __future__ import absolute_import
 import re
 import json
+from urllib.parse import urljoin, urlparse, parse_qs
 
 
 from svtplay_dl.log import log
 from svtplay_dl.service.svtplay import Svtplay
-from svtplay_dl.utils.urllib import urlparse, urljoin, parse_qs
 from svtplay_dl.error import ServiceError
 
 
@@ -50,15 +50,9 @@ class Barnkanalen(Svtplay):
             return
 
         if "live" in janson["video"]:
-            self.options.live = janson["video"]["live"]
+            self.config.set("live", janson["video"]["live"])
 
-        if self.options.output_auto:
-            self.options.service = "svtplay"
-            self.options.output = self.outputfilename(janson["video"], self.options.output)
-
-        if self.exclude():
-            yield ServiceError("Excluding video.")
-            return
+        self.outputfilename(janson["video"])
 
         if "programVersionId" in janson["video"]:
             vid = janson["video"]["programVersionId"]
@@ -100,8 +94,6 @@ class Barnkanalen(Svtplay):
         url = self.url + "/" + str(lvideos["id"])
         parse = urlparse(url)
         if parse.path not in videos:
-            filename = self.outputfilename(lvideos, self.options.output)
-            if not self.exclude2(filename):
-                videos.append(parse.path)
+            videos.append(parse.path)
 
         return videos

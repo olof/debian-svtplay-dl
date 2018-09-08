@@ -3,9 +3,9 @@
 from __future__ import absolute_import
 import re
 import copy
+from urllib.parse import urlparse
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils.urllib import urlparse
 from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.error import ServiceError
 from svtplay_dl.subtitle import subtitle
@@ -17,10 +17,6 @@ class Flowonline(Service, OpenGraphThumbMixin):
     ]
 
     def get(self):
-        if self.exclude():
-            yield ServiceError("Excluding video")
-            return
-
         match = re.search('iframe src="(/embed/[^"]+)"', self.get_urldata())
         if not match:
             yield ServiceError("Cant find video")
@@ -33,13 +29,13 @@ class Flowonline(Service, OpenGraphThumbMixin):
 
         match = re.search('src="([^"]+vtt)"', data.text)
         if match:
-            yield subtitle(copy.copy(self.options), "wrst", match.group(1))
+            yield subtitle(copy.copy(self.config), "wrst", match.group(1))
 
         match = re.search('source src="([^"]+)" type="application/x-mpegURL"', data.text)
         if not match:
             yield ServiceError("Cant find video file")
             return
 
-        streams = hlsparse(self.options, self.http.request("get", match.group(1)), match.group(1))
+        streams = hlsparse(self.config, self.http.request("get", match.group(1)), match.group(1), output=self.output)
         for n in list(streams.keys()):
             yield streams[n]

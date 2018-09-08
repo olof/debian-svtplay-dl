@@ -6,9 +6,9 @@ import xml.etree.ElementTree as ET
 import os
 import re
 from datetime import datetime
+from urllib.parse import urljoin
 
-from svtplay_dl.output import progress_stream, output, ETA, progressbar
-from svtplay_dl.utils.urllib import urljoin
+from svtplay_dl.utils.output import output, progress_stream, ETA, progressbar
 from svtplay_dl.error import UIException, ServiceError
 from svtplay_dl.fetcher import VideoRetriever
 
@@ -45,10 +45,10 @@ def templateelemt(element, filename, idnumber, offset_sec, duration_sec):
         duration = float(element.attrib["duration"])
 
     if offset_sec is not None and duration_sec is None:
-        start += int(offset_sec / ( duration / timescale ))
+        start += int(offset_sec / (duration / timescale))
 
     if duration_sec is not None:
-        total = int(duration_sec / ( duration / timescale ))
+        total = int(duration_sec / (duration / timescale))
 
     selements = None
     rvalue = None
@@ -128,21 +128,21 @@ def adaptionset(element, url, baseurl=None, offset_sec=None, duration_sec=None):
     return streams
 
 
-def dashparse(options, res, url):
+def dashparse(config, res, url, output=None):
     streams = {}
     baseurl = None
     offset_sec = None
     duration_sec = None
 
     if not res:
-        return None
+        return streams
 
     if res.status_code >= 400:
         streams[0] = ServiceError("Can't read DASH playlist. {0}".format(res.status_code))
         return streams
     if len(res.text) < 1:
         streams[0] = ServiceError("Can't read DASH playlist. {0}, size: {1}".format(res.status_code, len(res.text)))
-        return
+        return streams
     xml = ET.XML(res.text)
 
     if xml.find("./{urn:mpeg:dash:schema:mpd:2011}BaseURL") is not None:
@@ -152,15 +152,14 @@ def dashparse(options, res, url):
         availabilityStartTime = xml.attrib["availabilityStartTime"]
         publishTime = xml.attrib["publishTime"]
 
-        datetime_start = datetime.strptime(availabilityStartTime, "%Y-%m-%dT%H:%M:%S.%fZ")
-        datetime_publish = datetime.strptime(publishTime, "%Y-%m-%dT%H:%M:%S.%fZ")
+        datetime_start = parse_dates(availabilityStartTime)
+        datetime_publish = parse_dates(publishTime)
         diff_publish = datetime_publish - datetime_start
         offset_sec = diff_publish.total_seconds()
 
         if "mediaPresentationDuration" in xml.attrib:
             mediaPresentationDuration = xml.attrib["mediaPresentationDuration"]
-            dt = datetime.strptime(mediaPresentationDuration, 'PT%HH%MM%S.%fS')
-            duration_sec = (dt - datetime(1900, 1, 1)).total_seconds()
+            duration_sec = (parse_dates(mediaPresentationDuration) - datetime(1900, 1, 1)).total_seconds()
 
     temp = xml.findall('.//{urn:mpeg:dash:schema:mpd:2011}AdaptationSet[@mimeType="audio/mp4"]')
     audiofiles = adaptionset(temp, url, baseurl, offset_sec, duration_sec)
@@ -169,28 +168,43 @@ def dashparse(options, res, url):
 
     if not audiofiles or not videofiles:
         streams[0] = ServiceError("Found no Audiofiles or Videofiles to download.")
-        return
-
-    options.other = "mp4"
+        return streams
 
     for i in videofiles.keys():
         bitrate = i + list(audiofiles.keys())[0]
-        options.segments = videofiles[i]["segments"]
-        streams[bitrate] = DASH(copy.copy(options), url, bitrate, cookies=res.cookies,
-                                     audio=audiofiles[list(audiofiles.keys())[0]]["files"], files=videofiles[i]["files"])
+        streams[bitrate] = DASH(copy.copy(config), url, bitrate, cookies=res.cookies,
+                                audio=audiofiles[list(audiofiles.keys())[0]]["files"], files=videofiles[i]["files"],
+                                output=output, segments=videofiles[i]["segments"])
 
     return streams
 
 
+def parse_dates(date_str):
+    date_patterns = ["%Y-%m-%dT%H:%M:%S.%fZ", "PT%HH%MM%S.%fS", "PT%HH%MM%SS", "PT%MM%S.%fS", "PT%MM%SS"]
+    dt = None
+    for pattern in date_patterns:
+        try:
+            dt = datetime.strptime(date_str, pattern)
+            break
+        except Exception:
+            pass
+    if not dt:
+        raise ValueError("Can't parse date format: {0}".format(date_str))
+
+    return dt
+
+
 class DASH(VideoRetriever):
+    @property
     def name(self):
         return "dash"
 
     def download(self):
-        if self.options.live and not self.options.force:
+        self.output_extention = "mp4"
+        if self.config.get("live") and not self.config.get("force"):
             raise LiveDASHException(self.url)
 
-        if self.options.segments:
+        if self.segments:
             if self.audio:
                 self._download2(self.audio, audio=True)
             self._download2(self.files)
@@ -203,15 +217,15 @@ class DASH(VideoRetriever):
         cookies = self.kwargs["cookies"]
 
         if audio:
-            file_d = output(copy.copy(self.options), "m4a")
+            file_d = output(copy.copy(self.output), self.config, extension="m4a")
         else:
-            file_d = output(self.options, self.options.other)
+            file_d = output(self.output, self.config, extension="mp4")
         if file_d is None:
             return
         eta = ETA(len(files))
         n = 1
         for i in files:
-            if not self.options.silent:
+            if not self.config.get("silent"):
                 eta.increment()
                 progressbar(len(files), n, ''.join(['ETA: ', str(eta)]))
                 n += 1
@@ -223,6 +237,6 @@ class DASH(VideoRetriever):
             file_d.write(data)
 
         file_d.close()
-        if not self.options.silent:
+        if not self.config.get("silent"):
             progress_stream.write('\n')
         self.finished = True

@@ -18,10 +18,6 @@ class Bigbrother(Service, OpenGraphThumbMixin):
     def get(self):
         data = self.get_urldata()
 
-        if self.exclude():
-            yield ServiceError("Excluding video")
-            return
-
         match = re.search(r'id="(bcPl[^"]+)"', data)
         if not match:
             yield ServiceError("Can't find flash id.")
@@ -46,7 +42,8 @@ class Bigbrother(Service, OpenGraphThumbMixin):
             return
         videoplayer = match.group(1)
 
-        dataurl = "http://c.brightcove.com/services/viewer/htmlFederated?flashID={0}&playerID={1}&playerKey={2}&isVid=true&isUI=true&dynamicStreaming=true&@videoPlayer={3}".format(flashid, playerid, playerkey, videoplayer)
+        dataurl = "http://c.brightcove.com/services/viewer/htmlFederated?flashID={0}&playerID={1}&playerKey={2}" \
+                  "&isVid=true&isUI=true&dynamicStreaming=true&@videoPlayer={3}".format(flashid, playerid, playerkey, videoplayer)
         data = self.http.request("get", dataurl).content
         match = re.search(r'experienceJSON = ({.*});', data)
         if not match:
@@ -61,15 +58,15 @@ class Bigbrother(Service, OpenGraphThumbMixin):
 
         for i in renditions:
             if i["defaultURL"].endswith("f4m"):
-                streams = hdsparse(copy.copy(self.options), self.http.request("get", i["defaultURL"], params={"hdcore": "3.7.0"}), i["defaultURL"])
-                if streams:
-                    for n in list(streams.keys()):
-                        yield streams[n]
+                streams = hdsparse(copy.copy(self.config),
+                                   self.http.request("get", i["defaultURL"], params={"hdcore": "3.7.0"}), i["defaultURL"], output=self.output)
+                for n in list(streams.keys()):
+                    yield streams[n]
 
             if i["defaultURL"].endswith("m3u8"):
-                streams = hlsparse(self.options, self.http.request("get", i["defaultURL"]), i["defaultURL"])
+                streams = hlsparse(self.config, self.http.request("get", i["defaultURL"]), i["defaultURL"], output=self.output)
                 for n in list(streams.keys()):
                     yield streams[n]
 
             if i["defaultURL"].endswith("mp4"):
-                yield HTTP(copy.copy(self.options), i["defaultURL"], i["encodingRate"] / 1024)
+                yield HTTP(copy.copy(self.config), i["defaultURL"], i["encodingRate"] / 1024, output=self.output)

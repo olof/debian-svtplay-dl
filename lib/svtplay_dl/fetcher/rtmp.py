@@ -5,37 +5,35 @@ import subprocess
 import shlex
 
 from svtplay_dl.log import log
-from svtplay_dl.utils import is_py2
 from svtplay_dl.fetcher import VideoRetriever
-from svtplay_dl.output import output
+from svtplay_dl.utils.output import output, formatname
 
 
 class RTMP(VideoRetriever):
+    @property
     def name(self):
         return "rtmp"
 
     def download(self):
         """ Get the stream from RTMP """
+        self.output_extention = "flv"
         args = []
-        if self.options.live:
+        if self.config.get("live"):
             args.append("-v")
 
-        if self.options.resume:
+        if self.config.get("resume"):
             args.append("-e")
 
-        file_d = output(self.options, "flv", False)
+        file_d = output(self.output, self.config, "flv", False)
         if file_d is None:
             return
-        args += ["-o", self.options.output]
-        if self.options.silent:
+        args += ["-o", formatname(self.output, self.config, "flv")]
+        if self.config.get("silent"):
             args.append("-q")
-        if self.options.other:
-            if is_py2:
-                args += shlex.split(self.options.other.encode("utf-8"))
-            else:
-                args += shlex.split(self.options.other)
+        if self.kwargs.get("other"):
+            args += shlex.split(self.kwargs.pop("other"))
 
-        if self.options.verbose:
+        if self.config.get("verbose"):
             args.append("-V")
 
         command = ["rtmpdump", "-r", self.url] + args

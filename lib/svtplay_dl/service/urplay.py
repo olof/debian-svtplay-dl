@@ -4,14 +4,14 @@ from __future__ import absolute_import
 import re
 import json
 import copy
+from urllib.parse import urljoin, urlparse
+
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils.urllib import urljoin, urlparse
 from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.log import log
 from svtplay_dl.error import ServiceError
 from svtplay_dl.subtitle import subtitle
-from svtplay_dl.utils import filenamify
 
 
 class Urplay(Service, OpenGraphThumbMixin):
@@ -24,10 +24,6 @@ class Urplay(Service, OpenGraphThumbMixin):
             yield ServiceError("Can't find json info")
             return
 
-        if self.exclude():
-            yield ServiceError("Excluding video")
-            return
-
         data = match.group(1)
         jsondata = json.loads(data)
         if len(jsondata["subtitles"]) > 0:
@@ -38,10 +34,10 @@ class Urplay(Service, OpenGraphThumbMixin):
                         subtype = "wrst"
                     else:
                         subtype = "tt"
-                    if self.options.get_all_subtitles:
-                        yield subtitle(copy.copy(self.options), subtype, absurl, "-" + filenamify(sub["label"]))
+                    if self.config.get("get_all_subtitles"):
+                        yield subtitle(copy.copy(self.config), subtype, absurl, sub["label"], output=self.output)
                     else:
-                        yield subtitle(copy.copy(self.options), subtype, absurl)
+                        yield subtitle(copy.copy(self.config), subtype, absurl, output=self.output)
 
         if "streamer" in jsondata["streaming_config"]:
             basedomain = jsondata["streaming_config"]["streamer"]["redirect"]
@@ -59,15 +55,15 @@ class Urplay(Service, OpenGraphThumbMixin):
             hls_hd = "{0}{1}".format(http_hd, jsondata["streaming_config"]["http_streaming"]["hls_file"])
             hd = True
         hls = "{0}{1}".format(http, jsondata["streaming_config"]["http_streaming"]["hls_file"])
-        streams = hlsparse(self.options, self.http.request("get", hls), hls)
+        streams = hlsparse(self.config, self.http.request("get", hls), hls, output=self.output)
         for n in list(streams.keys()):
             yield streams[n]
         if hd:
-            streams = hlsparse(self.options, self.http.request("get", hls_hd), hls_hd)
+            streams = hlsparse(self.config, self.http.request("get", hls_hd), hls_hd, output=self.output)
             for n in list(streams.keys()):
                 yield streams[n]
 
-    def find_all_episodes(self, options):
+    def find_all_episodes(self, config):
         parse = urlparse(self.url)
         episodes = []
 
@@ -97,7 +93,7 @@ class Urplay(Service, OpenGraphThumbMixin):
         episodes_new = []
         n = 0
         for i in episodes:
-            if n == options.all_last:
+            if n == config.get("all_last"):
                 break
             if i not in episodes_new:
                 episodes_new.append(i)

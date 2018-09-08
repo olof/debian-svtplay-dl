@@ -4,7 +4,6 @@ from svtplay_dl.fetcher.hls import hlsparse
 
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-
 from svtplay_dl.error import ServiceError
 
 
@@ -30,7 +29,6 @@ class Riksdagen(Service, OpenGraphThumbMixin):
         for i in janson:
             if i["mimetype"] == "application/x-mpegurl":
                 data2 = self.http.get(i["url"]).json()
-                streams = hlsparse(self.options, self.http.request("get", data2["url"]), data2["url"])
-                if streams:
-                    for n in list(streams.keys()):
-                        yield streams[n]
+                streams = hlsparse(self.config, self.http.request("get", data2["url"]), data2["url"], output=self.output)
+                for n in list(streams.keys()):
+                    yield streams[n]

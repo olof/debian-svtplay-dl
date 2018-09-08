@@ -3,12 +3,11 @@
 from __future__ import absolute_import
 import re
 import xml.etree.ElementTree as ET
+from urllib.parse import urlparse
 
 from svtplay_dl.service import Service
 from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.error import ServiceError
-from svtplay_dl.utils.urllib import urlparse
-from svtplay_dl.utils import is_py2
 
 
 class Solidtango(Service):
@@ -18,9 +17,6 @@ class Solidtango(Service):
     def get(self):
         data = self.get_urldata()
 
-        if self.exclude():
-            yield ServiceError("Excluding video")
-            return
         match = re.search('src="(http://mm-resource-service.herokuapp.com[^"]*)"', data)
         if match:
             data = self.http.request("get", match.group(1)).text
@@ -33,18 +29,18 @@ class Solidtango(Service):
 
         match = re.search('is_livestream: true', data)
         if match:
-            self.options.live = True
+            self.config.set("live", True)
         match = re.search('isLivestream: true', data)
         if match:
-            self.options.live = True
+            self.config.set("live", True)
         match = re.search('html5_source: "([^"]+)"', data)
         match2 = re.search('hlsURI: "([^"]+)"', data)
         if match:
-            streams = hlsparse(self.options, self.http.request("get", match.group(1)), match.group(1))
+            streams = hlsparse(self.config, self.http.request("get", match.group(1)), match.group(1), output=self.output)
             for n in list(streams.keys()):
                 yield streams[n]
         elif match2:
-            streams = hlsparse(self.options, self.http.request("get", match2.group(1)), match2.group(1))
+            streams = hlsparse(self.config, self.http.request("get", match2.group(1)), match2.group(1), output=self.output)
             for n in list(streams.keys()):
                 yield streams[n]
         else:
@@ -55,10 +51,8 @@ class Solidtango(Service):
                 yield ServiceError("Can't find video info. if there is a video on the page. its a bug.")
                 return
             xmldoc = data.text
-            if is_py2 and isinstance(xmldoc, unicode):
-                xmldoc = xmldoc.encode("utf8")
             xml = ET.XML(xmldoc)
             elements = xml.findall(".//manifest")
-            streams = hlsparse(self.options, self.http.request("get", elements[0].text), elements[0].text)
+            streams = hlsparse(self.config, self.http.request("get", elements[0].text), elements[0].text, output=self.output)
             for n in list(streams.keys()):
                 yield streams[n]

@@ -4,13 +4,12 @@ from __future__ import absolute_import
 import re
 import copy
 import xml.etree.ElementTree as ET
+from urllib.parse import urlparse
 
-from svtplay_dl.utils.urllib import urlparse
+
 from svtplay_dl.service import Service
-from svtplay_dl.utils import is_py2_old
 from svtplay_dl.log import log
 from svtplay_dl.fetcher.rtmp import RTMP
-from svtplay_dl.error import ServiceError
 
 
 class Hbo(Service):
@@ -22,10 +21,6 @@ class Hbo(Service):
             other = parse.fragment
         except KeyError:
             log.error("Something wrong with that url")
-            return
-
-        if self.exclude():
-            yield ServiceError("Excluding video")
             return
 
         match = re.search("^/(.*).html", other)
@@ -40,10 +35,7 @@ class Hbo(Service):
         data = self.http.request("get", url).content
         xml = ET.XML(data)
         ss = xml.find("videos")
-        if is_py2_old:
-            sa = list(ss.getiterator("size"))
-        else:
-            sa = list(ss.iter("size"))
+        sa = list(ss.iter("size"))
 
         for i in sa:
             videourl = i.find("tv14").find("path").text

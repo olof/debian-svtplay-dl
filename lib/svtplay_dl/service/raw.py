@@ -10,30 +10,19 @@ from svtplay_dl.fetcher.dash import dashparse
 
 class Raw(Service):
     def get(self):
-        if self.exclude():
-            return
-
-        extention = False
         filename = os.path.basename(self.url[:self.url.rfind("/")])
-        if self.options.output and os.path.isdir(self.options.output):
-            self.options.output = os.path.join(os.path.dirname(self.options.output), filename)
-            extention = True
-        elif self.options.output is None:
-            self.options.output = filename
-            extention = True
+        self.output["title"] = filename
 
         streams = []
         if re.search(".f4m", self.url):
-            if extention:
-                self.options.output = "{0}.flv".format(self.options.output)
-
-            streams.append(hdsparse(self.options, self.http.request("get", self.url, params={"hdcore": "3.7.0"}), self.url))
+            self.output["ext"] = "flv"
+            streams.append(hdsparse(self.config, self.http.request("get", self.url, params={"hdcore": "3.7.0"}), self.url, output=self.output))
 
         if re.search(".m3u8", self.url):
-            streams.append(hlsparse(self.options, self.http.request("get", self.url), self.url))
+            streams.append(hlsparse(self.config, self.http.request("get", self.url), self.url, output=self.output))
 
         if re.search(".mpd", self.url):
-            streams.append(dashparse(self.options, self.http.request("get", self.url), self.url))
+            streams.append(dashparse(self.config, self.http.request("get", self.url), self.url, output=self.output))
 
         for stream in streams:
             if stream:
