@@ -58,6 +58,8 @@ def parser(version):
 
     general.add_argument('--version', action='version', version='%(prog)s {0}'.format(version))
     general.add_argument("-o", "--output", metavar="output", default=None, help="outputs to the given filename or folder")
+    general.add_argument("--subfolder", action="store_true", default=False,
+                         help="Create a subfolder titled as the show, non-series gets in folder movies")
     general.add_argument("--config", dest="configfile", metavar="configfile", default=CONFIGFILE, help="Specify configuration file")
     general.add_argument("-f", "--force", action="store_true", dest="force", default=False,
                          help="overwrite if file exists already")
@@ -84,12 +86,16 @@ def parser(version):
                          help="Remux from one container to mp4 using ffmpeg or avconv")
     general.add_argument("--exclude", dest="exclude", default=None, metavar="WORD1,WORD2,...",
                          help="exclude videos with the WORD(s) in the filename. comma separated.")
+    general.add_argument("--after-date", dest="after_date", default=None, metavar="yyyy-MM-dd",
+                         help="only videos published on or after this date")
     general.add_argument("--proxy", dest="proxy", default=None,
                          metavar="proxy", help="Use the specified HTTP/HTTPS/SOCKS proxy. To enable experimental "
                                                "SOCKS proxy, specify a proper scheme. For example "
                                                "socks5://127.0.0.1:1080/.")
     general.add_argument("-v", "--verbose", action="store_true", dest="verbose", default=False,
                          help="explain what is going on")
+    general.add_argument("--nfo", action="store_true", dest="nfo", default=False,
+                         help="create a NFO file")
 
     quality = parser.add_argument_group("Quality")
     quality.add_argument("-q", "--quality", default=0, metavar="quality",
@@ -144,6 +150,7 @@ def parser(version):
 def setup_defaults():
     options = Options()
     options.set("output", None)
+    options.set("subfolder", False)
     options.set("configfile", CONFIGFILE)
     options.set("resume", False)
     options.set("live", False)
@@ -168,10 +175,12 @@ def setup_defaults():
     options.set("convert_subtitle_colors", False)
     options.set("preferred", None)
     options.set("verbose", False)
+    options.set("nfo", False)
     options.set("output_auto", False)
     options.set("service", None)
     options.set("cookies", None)
     options.set("exclude", None)
+    options.set("after_date", None)
     options.set("get_url", False)
     options.set("ssl_verify", True)
     options.set("http_headers", None)
@@ -187,6 +196,7 @@ def setup_defaults():
 
 def parsertoconfig(config, parser):
     config.set("output", parser.output)
+    config.set("subfolder", parser.subfolder)
     config.set("configfile", parser.configfile)
     config.set("resume", parser.resume)
     config.set("live", parser.live)
@@ -208,7 +218,9 @@ def parsertoconfig(config, parser):
     config.set("require_subtitle", parser.require_subtitle)
     config.set("preferred", parser.preferred)
     config.set("verbose", parser.verbose)
+    config.set("nfo", parser.nfo)
     config.set("exclude", parser.exclude)
+    config.set("after_date", parser.after_date)
     config.set("get_url", parser.get_url)
     config.set("ssl_verify", parser.ssl_verify)
     config.set("http_headers", parser.http_headers)

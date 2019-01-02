@@ -7,7 +7,7 @@ import os
 from urllib.parse import urlparse
 from svtplay_dl.utils.parser import readconfig, setup_defaults, merge
 
-from svtplay_dl.utils.http import download_thumbnail, HTTP
+from svtplay_dl.utils.http import download_thumbnails, HTTP
 
 
 class Service(object):
@@ -22,7 +22,10 @@ class Service(object):
         self.cookies = {}
         self.auto_name = None
         self.output = {"title": None, "season": None, "episode": None, "episodename": None,
-                       "id": None, "service": self.__class__.__name__.lower()}
+                       "id": None, "service": self.__class__.__name__.lower(),
+                       "tvshow": None, "title_nice": None, "showdescription": None,
+                       "episodedescription": None, "showthumbnailurl": None,
+                       "episodethumbnailurl": None, "publishing_datetime": None}
         if not http:
             self.http = HTTP(config)
         else:
@@ -103,7 +106,21 @@ class OpenGraphThumbMixin(object):
         url = opengraph_get(self.get_urldata(), "image")
         if url is None:
             return
-        download_thumbnail(options, url)
+        download_thumbnails(options, [(False, url)])
+
+
+class MetadataThumbMixin(object):
+    """
+    Mix this into the service class to grab thumbnail from extracted metadata.
+    """
+    def get_thumbnail(self, options):
+        urls = []
+        if self.output["showthumbnailurl"] is not None:
+            urls.append((True, self.output["showthumbnailurl"]))
+        if self.output["episodethumbnailurl"] is not None:
+            urls.append((False, self.output["episodethumbnailurl"]))
+        if urls:
+            download_thumbnails(self.output, options, urls)
 
 
 class Generic(Service):

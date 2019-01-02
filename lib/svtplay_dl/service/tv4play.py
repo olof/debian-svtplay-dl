@@ -73,6 +73,9 @@ class Tv4play(Service, OpenGraphThumbMixin):
 
         url = "https://playback-api.b17g.net/media/{}?service=tv4&device=browser&protocol=hls%2Cdash&drm=widevine".format(vid)
         res = self.http.request("get", url, cookies=self.cookies)
+        if res.status_code > 200:
+            yield ServiceError("Can't play this because the video is geoblocked or not available.")
+            return
         if res.json()["playbackItem"]["type"] == "hls":
             streams = hlsparse(self.config, self.http.request("get", res.json()["playbackItem"]["manifestUrl"]),
                                res.json()["playbackItem"]["manifestUrl"], output=self.output, httpobject=self.http)
@@ -80,7 +83,7 @@ class Tv4play(Service, OpenGraphThumbMixin):
                 yield streams[n]
 
     def _getjson(self):
-        match = re.search(".prefetched = (\[.*\]);", self.get_urldata())
+        match = re.search(r".prefetched = (\[.*\]);", self.get_urldata())
         return match
 
     def find_all_episodes(self, config):
@@ -92,13 +95,13 @@ class Tv4play(Service, OpenGraphThumbMixin):
         for i in jansson:
             janson2 = json.loads(i["data"])
             if "program" in janson2["data"]:
-                if "panels" in janson2["data"]["program"]:
-                    for n in janson2["data"]["program"]["panels"]:
-                        if n["assetType"] == "EPISODE":
+                if "programPanels" in janson2["data"]["program"]:
+                    for n in janson2["data"]["program"]["programPanels"]["panels"]:
+                        if n.get("assetType", None) == "EPISODE":
                             for z in n["videoList"]["videoAssets"]:
                                 show = z["program_nid"]
                                 items.append(z["id"])
-                        if n["assetType"] == "CLIP" and config.get("include_clips"):
+                        if n.get("assetType", None) == "CLIP" and config.get("include_clips"):
                             for z in n["videoList"]["videoAssets"]:
                                 show = z["program_nid"]
                                 items.append(z["id"])
@@ -136,6 +139,9 @@ class Tv4(Service, OpenGraphThumbMixin):
 
         url = "https://playback-api.b17g.net/media/{}?service=tv4&device=browser&protocol=hls%2Cdash&drm=widevine".format(self.output["id"])
         res = self.http.request("get", url, cookies=self.cookies)
+        if res.status_code > 200:
+            yield ServiceError("Can't play this because the video is geoblocked.")
+            return
         if res.json()["playbackItem"]["type"] == "hls":
             streams = hlsparse(self.config, self.http.request("get", res.json()["playbackItem"]["manifestUrl"]),
                                res.json()["playbackItem"]["manifestUrl"], output=self.output)

@@ -176,6 +176,8 @@ class HLS(VideoRetriever):
                 # Update key/decryptor
                 if "EXT-X-KEY" in i:
                     keyurl = get_full_url(i["EXT-X-KEY"]["URI"], url)
+                    if keyurl and keyurl[:4] == "skd:":
+                        raise HLSException(keyurl, "Can't decrypt beacuse of DRM")
                     key = self.http.request("get", keyurl, cookies=keycookies, headers=headers).content
                     iv = binascii.unhexlify(i["EXT-X-KEY"]["IV"][2:].zfill(32)) if "IV" in i["EXT-X-KEY"] else random_iv()
                     decryptor = AES.new(key, AES.MODE_CBC, iv)
@@ -421,7 +423,7 @@ class M3U8():
 def _get_tag_attribute(line):
     line = line[1:]
     try:
-        search_line = re.search("^([A-Z\-]*):(.*)", line)
+        search_line = re.search(r"^([A-Z\-]*):(.*)", line)
         return search_line.group(1), search_line.group(2)
     except Exception:
         return line, None
@@ -434,7 +436,7 @@ def _get_tuple_attribute(attribute):
             name, value = art_l.split("=", 1)
             name = name.strip()
             # Checks for attribute name
-            if not re.match("^[A-Z0-9\-]*$", name):
+            if not re.match(r"^[A-Z0-9\-]*$", name):
                 raise ValueError("Not a valid attribute name.")
 
             # Remove extra quotes of string

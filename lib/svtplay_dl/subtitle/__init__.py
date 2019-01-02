@@ -134,21 +134,25 @@ class subtitle(object):
         text = subdata.text
         text = re.sub(r'&', '&amp;', text)
         tree = ET.fromstring(text)
-        subt = tree.find("Font")
+        allsubs = tree.findall(".//Subtitle")
         subs = ""
-        n = 0
-        for i in subt.getiterator():
-            if i.tag == "Subtitle":
-                n = i.attrib["SpotNumber"]
+        increase = 0
+        for sub in allsubs:
+            try:
+                number = int(sub.attrib["SpotNumber"])
+            except ValueError:
+                number = int(re.search(r"(\d+)", sub.attrib["SpotNumber"]).group(1))
+                increase += 1
+            n = number + increase
 
-                if i.attrib["SpotNumber"] == "1":
-                    subs += "%s\n%s --> %s\n" % (i.attrib["SpotNumber"], timecolon(i.attrib["TimeIn"]), timecolon(i.attrib["TimeOut"]))
-                else:
-                    subs += "\n%s\n%s --> %s\n" % (i.attrib["SpotNumber"], timecolon(i.attrib["TimeIn"]), timecolon(i.attrib["TimeOut"]))
-            else:
-                if int(n) > 0 and i.text:
-                    subs += "%s\n" % decode_html_entities(i.text)
-
+            texts = sub.findall(".//Text")
+            all = ""
+            for text in texts:
+                line = ""
+                for txt in text.itertext():
+                    line += "{}".format(txt)
+                all += "{}\n".format(decode_html_entities(line.lstrip()))
+            subs += "{}\n{} --> {}\n{}\n".format(n, timecolon(sub.attrib["TimeIn"]), timecolon(sub.attrib["TimeOut"]), all)
         subs = re.sub('&amp;', r'&', subs)
         return subs
 
@@ -239,8 +243,12 @@ class subtitle(object):
                 subnr = True
             else:
                 if self.config.get("convert_subtitle_colors"):
-                    colors = {'30': '#000000', '31': '#ff0000', '32': '#00ff00', '33': '#ffff00',
-                              '34': '#0000ff', '35': '#ff00ff', '36': '#00ffff', '37': '#ffffff'}
+                    colors = {
+                        '30': '#000000', '31': '#ff0000', '32': '#00ff00', '33': '#ffff00', '34': '#0000ff',
+                        '35': '#ff00ff', '36': '#00ffff', '37': '#ffffff', 'c.black': '#000000', 'c.red': '#ff0000',
+                        'c.green': '#00ff00', 'c.yellow': '#ffff00', 'c.blue': '#0000ff', 'c.magneta': '#ff00ff',
+                        'c.cyan': '#00ffff', 'c.gray': '#ffffff',
+                    }
                     sub = i
                     for tag, color in colors.items():
                         regex1 = '<' + tag + '>'
@@ -274,7 +282,9 @@ class subtitle(object):
                     if n:
                         itmes.append(n)
                     else:
-                        if len(subs) > 1 and itmes[1] == subs[-1][1]:  # This will happen when  there is two sections in file
+                        if len(subs) > 1 and len(itmes) < 2:  # Ignore empty lines in unexpected places
+                            pass
+                        elif len(subs) > 1 and itmes[1] == subs[-1][1]:  # This will happen when there are two sections in file
                             ha = strdate(subs[-1][0])
                             ha3 = strdate(itmes[0])
                             second = str2sec(ha3.group(2)) + time
@@ -358,7 +368,7 @@ def tt_text(node, data):
 
 
 def strdate(datestring):
-    match = re.search("^(\d+:\d+:[\.0-9]+) --> (\d+:\d+:[\.0-9]+)", datestring)
+    match = re.search(r"^(\d+:\d+:[\.0-9]+) --> (\d+:\d+:[\.0-9]+)", datestring)
     return match
 
 

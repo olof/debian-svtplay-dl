@@ -69,7 +69,7 @@ def templateelemt(element, filename, idnumber, offset_sec, duration_sec):
         time = [0]
         for n in selements:
             time.append(int(n.attrib["d"]))
-        match = re.search("\$Time\$", name)
+        match = re.search(r"\$Time\$", name)
         if rvalue and match and len(selements) < 3:
             for n in range(start, start + total):
                 new = name.replace("$Time$", str(n * int(rvalue[0].attrib["d"])))
@@ -81,7 +81,7 @@ def templateelemt(element, filename, idnumber, offset_sec, duration_sec):
                 new = name.replace("$Time$", str(number))
                 files.append(urljoin(filename, new))
     if "$Number" in name:
-        if re.search("\$Number(\%\d+)d\$", name):
+        if re.search(r"\$Number(\%\d+)d\$", name):
             vname = name.replace("$Number", "").replace("$", "")
             for n in range(start, start + total):
                 files.append(urljoin(filename, vname % n))
@@ -130,10 +130,6 @@ def adaptionset(element, url, baseurl=None, offset_sec=None, duration_sec=None):
 
 def dashparse(config, res, url, output=None):
     streams = {}
-    baseurl = None
-    offset_sec = None
-    duration_sec = None
-
     if not res:
         return streams
 
@@ -143,7 +139,17 @@ def dashparse(config, res, url, output=None):
     if len(res.text) < 1:
         streams[0] = ServiceError("Can't read DASH playlist. {0}, size: {1}".format(res.status_code, len(res.text)))
         return streams
-    xml = ET.XML(res.text)
+
+    return _dashparse(config, res.text, url, output, res.cookies)
+
+
+def _dashparse(config, text, url, output, cookies):
+    streams = {}
+    baseurl = None
+    offset_sec = None
+    duration_sec = None
+
+    xml = ET.XML(text)
 
     if xml.find("./{urn:mpeg:dash:schema:mpd:2011}BaseURL") is not None:
         baseurl = xml.find("./{urn:mpeg:dash:schema:mpd:2011}BaseURL").text
@@ -172,7 +178,7 @@ def dashparse(config, res, url, output=None):
 
     for i in videofiles.keys():
         bitrate = i + list(audiofiles.keys())[0]
-        streams[bitrate] = DASH(copy.copy(config), url, bitrate, cookies=res.cookies,
+        streams[bitrate] = DASH(copy.copy(config), url, bitrate, cookies=cookies,
                                 audio=audiofiles[list(audiofiles.keys())[0]]["files"], files=videofiles[i]["files"],
                                 output=output, segments=videofiles[i]["segments"])
 
@@ -180,7 +186,8 @@ def dashparse(config, res, url, output=None):
 
 
 def parse_dates(date_str):
-    date_patterns = ["%Y-%m-%dT%H:%M:%S.%fZ", "PT%HH%MM%S.%fS", "PT%HH%MM%SS", "PT%MM%S.%fS", "PT%MM%SS"]
+    date_patterns = ["%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%S", "PT%HH%MM%S.%fS",
+                     "PT%HH%MM%SS", "PT%MM%S.%fS", "PT%MM%SS", "PT%HH%SS", "PT%HH%S.%fS"]
     dt = None
     for pattern in date_patterns:
         try:
