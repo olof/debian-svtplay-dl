@@ -22,6 +22,7 @@ POD2MAN ?= pod2man --section 1 --utf8 \
 
 PREFIX ?= /usr/local
 BINDIR = $(PREFIX)/bin
+MANDIR = $(PREFIX)/share/man/man1
 
 PYTHON ?= /usr/bin/env python3
 export PYTHONPATH=lib
@@ -46,9 +47,10 @@ svtplay-dl.1.gz: svtplay-dl.1
 test:
 	sh scripts/run-tests.sh $(TEST_OPTS)
 
-install: svtplay-dl
-	install -d $(DESTDIR)$(BINDIR)
+install: svtplay-dl svtplay-dl.1.gz
+	install -d $(DESTDIR)$(BINDIR) $(DESTDIR)$(MANDIR)
 	install -m 755 svtplay-dl $(DESTDIR)$(BINDIR)
+	install -m 644 $(MANFILE).gz $(DESTDIR)$(MANDIR)
 
 cover:
 	sh scripts/run-tests.sh -C
