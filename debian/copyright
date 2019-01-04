@@ -4,12 +4,19 @@ Source: https://github.com/spaam/svtplay-dl
 Upstream-Name: svtplay-dl
 
 Files: *
-Copyright: 2011-2013, Johan Andersson
+Copyright: 2011-2018, Johan Andersson
 License: Expat
 
+Files: versioneer.py
+Copyright: 2018, Brian Warner
+License: CC0-1.0
+
 Files: debian/*
-Copyright: 2013, Olof Johansson <olof@ethup.se>
+Copyright: 2013-2019, Olof Johansson <olof@ethup.se>
 License: Expat
+
+License: CC0-1.0
+  See /usr/share/common-licenses/CC0-1.0
 
 License: Expat
  Permission is hereby granted, free of charge, to any person obtaining a copy
