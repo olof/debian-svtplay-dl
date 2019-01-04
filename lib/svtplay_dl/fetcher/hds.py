@@ -7,27 +7,19 @@ import logging
 import binascii
 import copy
 import xml.etree.ElementTree as ET
+from urllib.parse import urlparse
 
-from svtplay_dl.output import progressbar, progress_stream, ETA, output
-from svtplay_dl.utils import is_py2_old, is_py2
-from svtplay_dl.utils.urllib import urlparse
+from svtplay_dl.utils.output import progressbar, progress_stream, ETA, output
 from svtplay_dl.error import UIException
 from svtplay_dl.fetcher import VideoRetriever
 from svtplay_dl.error import ServiceError
 
+
 log = logging.getLogger('svtplay_dl')
 
-if is_py2:
-    def bytes(string=None, encoding="ascii"):
-        if string is None:
-            return ""
-        return string
 
-    def _chr(temp):
-        return temp
-else:
-    def _chr(temp):
-        return chr(temp)
+def _chr(temp):
+    return chr(temp)
 
 
 class HDSException(UIException):
@@ -42,28 +34,22 @@ class LiveHDSException(HDSException):
             url, "This is a live HDS stream, and they are not supported.")
 
 
-def hdsparse(options, res, manifest):
+def hdsparse(config, res, manifest, output=None):
     streams = {}
     bootstrap = {}
 
     if not res:
-        return None
+        return streams
 
     if res.status_code >= 400:
         streams[0] = ServiceError("Can't read HDS playlist. {0}".format(res.status_code))
         return streams
     data = res.text
-    if is_py2 and isinstance(data, unicode):
-        data = data.encode("utf-8")
 
     xml = ET.XML(data)
 
-    if is_py2_old:
-        bootstrapIter = xml.getiterator("{http://ns.adobe.com/f4m/1.0}bootstrapInfo")
-        mediaIter = xml.getiterator("{http://ns.adobe.com/f4m/1.0}media")
-    else:
-        bootstrapIter = xml.iter("{http://ns.adobe.com/f4m/1.0}bootstrapInfo")
-        mediaIter = xml.iter("{http://ns.adobe.com/f4m/1.0}media")
+    bootstrapIter = xml.iter("{http://ns.adobe.com/f4m/1.0}bootstrapInfo")
+    mediaIter = xml.iter("{http://ns.adobe.com/f4m/1.0}media")
 
     if xml.find("{http://ns.adobe.com/f4m/1.0}drmAdditionalHeader") is not None:
         streams[0] = ServiceError("HDS DRM protected content.")
@@ -78,19 +64,21 @@ def hdsparse(options, res, manifest):
     url = "{0}://{1}{2}".format(parse.scheme, parse.netloc, parse.path)
     for i in mediaIter:
         bootstrapid = bootstrap[i.attrib["bootstrapInfoId"]]
-        streams[int(i.attrib["bitrate"])] = HDS(copy.copy(options), url, i.attrib["bitrate"], url_id=i.attrib["url"],
+        streams[int(i.attrib["bitrate"])] = HDS(copy.copy(config), url, i.attrib["bitrate"], url_id=i.attrib["url"],
                                                 bootstrap=bootstrapid,
                                                 metadata=i.find("{http://ns.adobe.com/f4m/1.0}metadata").text,
-                                                querystring=querystring, cookies=res.cookies)
+                                                querystring=querystring, cookies=res.cookies, output=output)
     return streams
 
 
 class HDS(VideoRetriever):
+    @property
     def name(self):
         return "hds"
 
     def download(self):
-        if self.options.live and not self.options.force:
+        self.output_extention = "flv"
+        if self.config.get("live") and not self.config.get("force"):
             raise LiveHDSException(self.url)
 
         querystring = self.kwargs["querystring"]
@@ -102,7 +90,7 @@ class HDS(VideoRetriever):
             antal = readbox(bootstrap, box[0])
         baseurl = self.url[0:self.url.rfind("/")]
 
-        file_d = output(self.options, "flv")
+        file_d = output(self.output, self.config, "flv")
         if file_d is None:
             return
 
@@ -118,7 +106,7 @@ class HDS(VideoRetriever):
         eta = ETA(total)
         while i <= total:
             url = "{0}/{1}Seg1-Frag{2}?{3}".format(baseurl, self.kwargs["url_id"], start, querystring)
-            if not self.options.silent:
+            if not self.config.get("silent"):
                 eta.update(i)
                 progressbar(total, i, ''.join(["ETA: ", str(eta)]))
             data = self.http.request("get", url, cookies=cookies)
@@ -131,7 +119,7 @@ class HDS(VideoRetriever):
             start += 1
 
         file_d.close()
-        if not self.options.silent:
+        if not self.config.get("silent"):
             progress_stream.write('\n')
         self.finished = True
 

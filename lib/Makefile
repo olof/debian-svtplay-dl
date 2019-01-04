@@ -1,5 +1,3 @@
-PYLINT_OPTS = --reports=no -d I -d C -d R -d W0511
-
 all: svtplay-dl
 
 clean:
@@ -17,7 +15,7 @@ export PACKAGES = svtplay_dl \
                  svtplay_dl.postprocess
 export PYFILES = $(sort $(addsuffix /*.py,$(subst .,/,$(PACKAGES))))
 
-PYTHON ?= /usr/bin/env python
+PYTHON ?= /usr/bin/env python3
 
 VERSION$(NO_GIT_VERSION) = $(shell git describe 2>/dev/null || echo $(LATEST_RELEASE)-unknown)
 
@@ -36,7 +34,7 @@ svtplay-dl: $(PYFILES)
 	done
 
 	# Add git version info to __version__, seen in --version
-	sed -i -e 's/^__version__ = "\([^"]\+\)"$$/__version__ = "$(VERSION)"/' \
+	sed -i -e 's/^__version__ = \(.*\)$$/__version__ = "$(VERSION)"/' \
 		.build/svtplay_dl/__init__.py
 
 	@# reset timestamps, to avoid non-determinism in zip file

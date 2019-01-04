@@ -8,10 +8,12 @@ import time
 from datetime import datetime, timedelta
 import binascii
 
-from svtplay_dl.output import progressbar, progress_stream, ETA, output
+import random
+
+from svtplay_dl.utils.output import progressbar, progress_stream, ETA, output
+from svtplay_dl.utils.http import get_full_url
 from svtplay_dl.error import UIException, ServiceError
 from svtplay_dl.fetcher import VideoRetriever
-from svtplay_dl.utils.urllib import urljoin
 from svtplay_dl.subtitle import subtitle
 
 
@@ -27,25 +29,11 @@ class LiveHLSException(HLSException):
             url, "This is a live HLS stream, and they are not supported.")
 
 
-def _get_full_url(url, srcurl):
-    if url[:4] == 'http':
-        return url
-    if url[0] == '/':
-        baseurl = re.search(r'^(http[s]{0,1}://[^/]+)/', srcurl)
-        return "{0}{1}".format(baseurl.group(1), url)
-
-    # remove everything after last / in the path of the URL
-    baseurl = re.sub(r'^([^\?]+)/[^/]*(\?.*)?$', r'\1/', srcurl)
-    returl = urljoin(baseurl, url)
-
-    return returl
-
-
-def hlsparse(options, res, url, **kwargs):
+def hlsparse(config, res, url, **kwargs):
     streams = {}
 
     if not res:
-        return None
+        return streams
 
     if res.status_code > 400:
         streams[0] = ServiceError("Can't read HLS playlist. {0}".format(res.status_code))
@@ -55,14 +43,15 @@ def hlsparse(options, res, url, **kwargs):
     keycookie = kwargs.pop("keycookie", None)
     authorization = kwargs.pop("authorization", None)
     httpobject = kwargs.pop("httpobject", None)
+    output = kwargs.pop("output", None)
 
     media = {}
+    subtitles = {}
     segments = None
 
     if m3u8.master_playlist:
         for i in m3u8.master_playlist:
             audio_url = None
-            subtitle_url = None
             if i["TAG"] == "EXT-X-MEDIA":
                 if "AUTOSELECT" in i and (i["AUTOSELECT"].upper() == "YES"):
                     if i["TYPE"] and i["TYPE"] != "SUBTITLES":
@@ -74,26 +63,41 @@ def hlsparse(options, res, url, **kwargs):
                             media[i["GROUP-ID"]].append(i["URI"])
                         else:
                             segments = False
+                if i["TYPE"] == "SUBTITLES":
+                    if "URI" in i:
+                        if i["GROUP-ID"] not in subtitles:
+                            subtitles[i["GROUP-ID"]] = []
+                        item = [i["URI"], i["LANGUAGE"]]
+                        if item not in subtitles[i["GROUP-ID"]]:
+                            subtitles[i["GROUP-ID"]].append(item)
                 continue
             elif i["TAG"] == "EXT-X-STREAM-INF":
                 bit_rate = float(i["BANDWIDTH"]) / 1000
-
                 if "AUDIO" in i and (i["AUDIO"] in media):
-                    audio_url = _get_full_url(media[i["AUDIO"]][0], url)
-                if "SUBTITLES" in i and (i["SUBTITLES"] in media):
-                    subtitle_url = _get_full_url(media[i["SUBTITLES"]][0], url)
-                urls = _get_full_url(i["URI"], url)
+                    audio_url = get_full_url(media[i["AUDIO"]][0], url)
+                urls = get_full_url(i["URI"], url)
             else:
                 continue  # Needs to be changed to utilise other tags.
-            options.segments = bool(segments)
-            if subtitle_url and httpobject:
-                m3u8s = M3U8(httpobject.request("get", subtitle_url, cookies=res.cookies).text)
-                streams[1] = subtitle(copy.copy(options), "wrst", _get_full_url(m3u8s.media_segment[0]["URI"], url))
-            streams[int(bit_rate)] = HLS(copy.copy(options), urls, bit_rate, cookies=res.cookies, keycookie=keycookie, authorization=authorization, audio=audio_url)
+            streams[int(bit_rate)] = HLS(copy.copy(config), urls, bit_rate,
+                                         cookies=res.cookies, keycookie=keycookie, authorization=authorization,
+                                         audio=audio_url, output=output, segments=bool(segments), kwargs=kwargs)
+
+        if subtitles and httpobject:
+            for sub in list(subtitles.keys()):
+                for n in subtitles[sub]:
+                    m3u8s = M3U8(httpobject.request("get", get_full_url(n[0], url), cookies=res.cookies).text)
+                    if "cmore" in url:
+                        subtype = "wrstsegment"  # this have been seen in tv4play
+                    else:
+                        subtype = "wrst"
+                    streams[int(random.randint(1, 40))] = subtitle(copy.copy(config), subtype,
+                                                                   get_full_url(m3u8s.media_segment[0]["URI"], url),
+                                                                   subfix=n[1], output=copy.copy(output), m3u8=m3u8s)
 
     elif m3u8.media_segment:
-        options.segments = False
-        streams[0] = HLS(copy.copy(options), url, 0, cookies=res.cookies, keycookie=keycookie, authorization=authorization)
+        config.set("segments", False)
+        streams[0] = HLS(copy.copy(config), url, 0, cookies=res.cookies, keycookie=keycookie, authorization=authorization,
+                         output=output, segments=False)
 
     else:
         streams[0] = ServiceError("Can't find HLS playlist in m3u8 file.")
@@ -102,18 +106,19 @@ def hlsparse(options, res, url, **kwargs):
 
 
 class HLS(VideoRetriever):
+    @property
     def name(self):
         return "hls"
 
     def download(self):
-
-        if self.options.segments:
+        self.output_extention = "ts"
+        if self.segments:
             if self.audio:
-                self._download(self.audio, file_name=(copy.copy(self.options), "audio.ts"))
-            self._download(self.url, file_name=(self.options, "ts"))
+                self._download(self.audio, file_name=(copy.copy(self.output), "audio.ts"))
+            self._download(self.url, file_name=(self.output, "ts"))
 
         else:
-            self._download(self.url, file_name=(self.options, "ts"))
+            self._download(self.url, file_name=(self.output, "ts"))
 
     def _download(self, url, file_name):
         cookies = self.kwargs.get("cookies", None)
@@ -130,11 +135,11 @@ class HLS(VideoRetriever):
                 return Random.new().read(AES.block_size)
             except ImportError:
                 return os.urandom(16)
-
-        file_d = output(file_name[0], file_name[1])
+        file_d = output(file_name[0], self.config, file_name[1])
         if file_d is None:
             return
 
+        hls_time_stamp = self.kwargs.pop("hls_time_stamp", False)
         decryptor = None
         size_media = len(m3u8.media_segment)
         eta = ETA(size_media)
@@ -146,10 +151,10 @@ class HLS(VideoRetriever):
                 duration = i["EXTINF"]["duration"]
                 max_duration = max(max_duration, duration)
                 total_duration += duration
-            item = _get_full_url(i["URI"], url)
+            item = get_full_url(i["URI"], url)
 
-            if not self.options.silent:
-                if self.options.live:
+            if not self.config.get("silent"):
+                if self.config.get("live"):
                     progressbar(size_media, index + 1, ''.join(['DU: ', str(timedelta(seconds=int(total_duration)))]))
                 else:
                     eta.increment()
@@ -170,7 +175,9 @@ class HLS(VideoRetriever):
 
                 # Update key/decryptor
                 if "EXT-X-KEY" in i:
-                    keyurl = _get_full_url(i["EXT-X-KEY"]["URI"], url)
+                    keyurl = get_full_url(i["EXT-X-KEY"]["URI"], url)
+                    if keyurl and keyurl[:4] == "skd:":
+                        raise HLSException(keyurl, "Can't decrypt beacuse of DRM")
                     key = self.http.request("get", keyurl, cookies=keycookies, headers=headers).content
                     iv = binascii.unhexlify(i["EXT-X-KEY"]["IV"][2:].zfill(32)) if "IV" in i["EXT-X-KEY"] else random_iv()
                     decryptor = AES.new(key, AES.MODE_CBC, iv)
@@ -182,10 +189,10 @@ class HLS(VideoRetriever):
 
             file_d.write(data)
 
-            if (self.options.capture_time > 0) and total_duration >= (self.options.capture_time * 60):
+            if self.config.get("capture_time") > 0 and total_duration >= self.config.get("capture_time") * 60:
                 break
 
-            if (size_media == (index + 1)) and self.options.live:
+            if (size_media == (index + 1)) and self.config.get("live"):
                 sleep_int = (start_time + max_duration * 2) - time.time()
                 if sleep_int > 0:
                     time.sleep(sleep_int)
@@ -194,9 +201,9 @@ class HLS(VideoRetriever):
                 while size_media_old == size_media:
                     start_time = time.time()
 
-                    if self.options.hls_time_stamp:
-
-                        end_time_stamp = (datetime.utcnow() - timedelta(seconds=max_duration * 2)).replace(microsecond=0)
+                    if hls_time_stamp:
+                        end_time_stamp = (datetime.utcnow() - timedelta(minutes=1,
+                                                                        seconds=max_duration * 2)).replace(microsecond=0)
                         start_time_stamp = end_time_stamp - timedelta(minutes=1)
 
                         base_url = url.split(".m3u8")[0]
@@ -213,7 +220,7 @@ class HLS(VideoRetriever):
                         time.sleep(max_duration)
 
         file_d.close()
-        if not self.options.silent:
+        if not self.config.get("silent"):
             progress_stream.write('\n')
         self.finished = True
 
@@ -416,7 +423,7 @@ class M3U8():
 def _get_tag_attribute(line):
     line = line[1:]
     try:
-        search_line = re.search("^([A-Z\-]*):(.*)", line)
+        search_line = re.search(r"^([A-Z\-]*):(.*)", line)
         return search_line.group(1), search_line.group(2)
     except Exception:
         return line, None
@@ -429,7 +436,7 @@ def _get_tuple_attribute(attribute):
             name, value = art_l.split("=", 1)
             name = name.strip()
             # Checks for attribute name
-            if not re.match("^[A-Z0-9\-]*$", name):
+            if not re.match(r"^[A-Z0-9\-]*$", name):
                 raise ValueError("Not a valid attribute name.")
 
             # Remove extra quotes of string

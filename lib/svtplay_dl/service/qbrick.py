@@ -6,7 +6,6 @@ import copy
 import xml.etree.ElementTree as ET
 
 from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.utils import is_py2_old
 from svtplay_dl.error import ServiceError
 from svtplay_dl.fetcher.rtmp import RTMP
 
@@ -16,10 +15,6 @@ class Qbrick(Service, OpenGraphThumbMixin):
 
     def get(self):
         data = self.get_urldata()
-
-        if self.exclude():
-            yield ServiceError("Excluding video")
-            return
 
         if re.findall(r"di.se", self.url):
             match = re.search("src=\"(http://qstream.*)\"></iframe", data)
@@ -45,16 +40,13 @@ class Qbrick(Service, OpenGraphThumbMixin):
             return
         live = xml.find("media").find("item").find("playlist").find("stream").attrib["isLive"]
         if live == "true":
-            self.options.live = True
+            self.config.set("live", True)
         data = self.http.request("get", url).content
         xml = ET.XML(data)
         server = xml.find("head").find("meta").attrib["base"]
         streams = xml.find("body").find("switch")
-        if is_py2_old:
-            sa = list(streams.getiterator("video"))
-        else:
-            sa = list(streams.iter("video"))
+        sa = list(streams.iter("video"))
 
         for i in sa:
-            self.options.other = "-y '{0}'".format(i.attrib["src"])
-            yield RTMP(copy.copy(self.options), server, i.attrib["system-bitrate"])
+            yield RTMP(copy.copy(self.config), server, i.attrib["system-bitrate"], output=self.output,
+                       other="-y '{0}'".format(i.attrib["src"]))

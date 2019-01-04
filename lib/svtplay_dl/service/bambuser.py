@@ -20,10 +20,6 @@ class Bambuser(Service, OpenGraphThumbMixin):
             yield ServiceError("Can't find video id in url")
             return
 
-        if self.exclude():
-            yield ServiceError("Excluding video")
-            return
-
         json_url = "http://player-c.api.bambuser.com/getVideo.json?api_key=005f64509e19a868399060af746a00aa&vid={0}".format(match.group(1))
         data = self.http.request("get", json_url).text
 
@@ -31,9 +27,9 @@ class Bambuser(Service, OpenGraphThumbMixin):
         video = info["url"]
         if video[:4] == "rtmp":
             playpath = info["id"][len(info["id"]) - 36:]
-            self.options.other = "-y {0}".format(playpath)
+            other = "-y {0}".format(playpath)
             if info["type"] == "live":
-                self.options.live = True
-            yield RTMP(copy.copy(self.options), video, "0")
+                self.config.set("live", True)
+            yield RTMP(copy.copy(self.config), video, "0", other=other)
         else:
-            yield HTTP(copy.copy(self.options), video, "0")
+            yield HTTP(copy.copy(self.config), video, "0")

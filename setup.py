@@ -2,25 +2,29 @@ from setuptools import setup, find_packages
 import sys
 import os
 
+import versioneer
+
 srcdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib/")
 sys.path.insert(0, srcdir)
-import svtplay_dl
+
+vi = sys.version_info
+if vi < (3, 4):
+    raise RuntimeError('svtplay-dl requires Python 3.4 or greater')
+
+about = {}
+with open(os.path.join(srcdir, 'svtplay_dl', '__version__.py'), 'r') as f:
+    exec(f.read(), about)
 
 deps = []
-
-if sys.version_info[0] == 2 and sys.version_info[1] <= 7 and sys.version_info[2] < 9:
-    deps.append("requests>=2.0.0")
-    deps.append("PySocks")
-    deps.append("pyOpenSSL")
-    deps.append("ndg-httpsclient")
-    deps.append("pyasn1")
-else:
-    deps.append(["requests>=2.0.0"])
-    deps.append("PySocks")
+deps.append("requests>=2.0.0")
+deps.append("PySocks")
+deps.append("pycryptodome")
+deps.append("pyyaml")
 
 setup(
     name="svtplay-dl",
-    version=svtplay_dl.__version__,
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
     packages=find_packages(
         'lib',
         exclude=["tests", "*.tests", "*.tests.*"]),
@@ -32,17 +36,23 @@ setup(
     description="Command-line program to download videos from various video on demand sites",
     license="MIT",
     url="https://svtplay-dl.se",
+    python_requires='>=3.4',
     classifiers=["Development Status :: 5 - Production/Stable",
                  "Environment :: Console",
                  "Operating System :: POSIX",
                  "Operating System :: Microsoft :: Windows",
-                 "Programming Language :: Python :: 2.6",
-                 "Programming Language :: Python :: 2.7",
-                 "Programming Language :: Python :: 3.3",
+                 "Programming Language :: Python :: 3",
                  "Programming Language :: Python :: 3.4",
                  "Programming Language :: Python :: 3.5",
+                 "Programming Language :: Python :: 3.6",
                  "Topic :: Internet :: WWW/HTTP",
                  "Topic :: Multimedia :: Sound/Audio",
                  "Topic :: Multimedia :: Video",
-                 "Topic :: Utilities"]
+                 "Topic :: Utilities"],
+    extras_require={"dev": [
+        "flake8>=3.5, <3.6",
+        "tox>=2.3, <3",
+        "rstcheck>=2.2, <4.0"
+    ]
+    }
 )

@@ -3,11 +3,11 @@
 from __future__ import absolute_import
 import re
 import json
+from urllib.parse import urljoin, urlparse, parse_qs
 
 
 from svtplay_dl.log import log
 from svtplay_dl.service.svtplay import Svtplay
-from svtplay_dl.utils.urllib import urlparse, urljoin, parse_qs
 from svtplay_dl.error import ServiceError
 
 
@@ -50,15 +50,10 @@ class Barnkanalen(Svtplay):
             return
 
         if "live" in janson["video"]:
-            self.options.live = janson["video"]["live"]
+            self.config.set("live", janson["video"]["live"])
 
-        if self.options.output_auto:
-            self.options.service = "svtplay"
-            self.options.output = self.outputfilename(janson["video"], self.options.output)
-
-        if self.exclude():
-            yield ServiceError("Excluding video.")
-            return
+        self.outputfilename(janson["video"])
+        self.extrametadata(janson)
 
         if "programVersionId" in janson["video"]:
             vid = janson["video"]["programVersionId"]
@@ -74,7 +69,7 @@ class Barnkanalen(Svtplay):
         for i in videos:
             yield i
 
-    def find_all_episodes(self, options):
+    def find_all_episodes(self, config):
         videos = []
         match = re.search("__barnplay'] = ({.*});", self.get_urldata())
         if not match:
@@ -92,16 +87,14 @@ class Barnkanalen(Svtplay):
 
         episodes = [urljoin("http://www.svt.se", x) for x in videos]
 
-        if options.all_last > 0:
-            return episodes[-options.all_last:]
+        if config.get("all_last") > 0:
+            return episodes[-config.get("all_last"):]
         return episodes
 
     def videos_to_list(self, lvideos, videos):
         url = self.url + "/" + str(lvideos["id"])
         parse = urlparse(url)
         if parse.path not in videos:
-            filename = self.outputfilename(lvideos, self.options.output)
-            if not self.exclude2(filename):
-                videos.append(parse.path)
+            videos.append(parse.path)
 
         return videos

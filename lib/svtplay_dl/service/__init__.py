@@ -2,26 +2,42 @@
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
 import re
-from svtplay_dl.utils.urllib import urlparse
-from svtplay_dl.utils import download_thumbnail, is_py2, HTTP
-
 import logging
+import os
+from urllib.parse import urlparse
+from svtplay_dl.utils.parser import readconfig, setup_defaults, merge
 
-log = logging.getLogger('svtplay_dl')
+from svtplay_dl.utils.http import download_thumbnails, HTTP
 
 
 class Service(object):
     supported_domains = []
     supported_domains_re = []
 
-    def __init__(self, options, _url):
-        self.options = options
+    def __init__(self, config, _url, http=None):
         self._url = _url
         self._urldata = None
         self._error = False
         self.subtitle = None
         self.cookies = {}
-        self.http = HTTP(options)
+        self.auto_name = None
+        self.output = {"title": None, "season": None, "episode": None, "episodename": None,
+                       "id": None, "service": self.__class__.__name__.lower(),
+                       "tvshow": None, "title_nice": None, "showdescription": None,
+                       "episodedescription": None, "showthumbnailurl": None,
+                       "episodethumbnailurl": None, "publishing_datetime": None}
+        if not http:
+            self.http = HTTP(config)
+        else:
+            self.http = http
+
+        #  Config
+        if os.path.isfile(config.get("configfile")):
+            self.config = merge(readconfig(setup_defaults(), config.get("configfile"),
+                                           service=self.__class__.__name__.lower()).get_variable(), config.get_variable())
+        else:
+            self.config = config
+        logging.debug("service: {}".format(self.__class__.__name__.lower()))
 
     @property
     def url(self):
@@ -55,29 +71,11 @@ class Service(object):
     def get_subtitle(self, options):
         pass
 
-    def exclude(self):
-        if self.options.exclude:
-            for i in self.options.exclude:
-                if is_py2:
-                    i = i.decode("utf-8")
-                if i in self.options.output:
-                    return True
-        return False
-
-    def exclude2(self, filename):
-        if self.options.exclude:
-            for i in self.options.exclude:
-                if is_py2:
-                    i = i.decode("utf-8")
-                if i in filename:
-                    return True
-        return False
-
     # the options parameter is unused, but is part of the
     # interface, so we don't want to remove it. Thus, the
     # pylint ignore.
     def find_all_episodes(self, options):  # pylint: disable-msg=unused-argument
-        log.warning("--all-episodes not implemented for this service")
+        logging.warning("--all-episodes not implemented for this service")
         return [self.url]
 
 
@@ -108,7 +106,21 @@ class OpenGraphThumbMixin(object):
         url = opengraph_get(self.get_urldata(), "image")
         if url is None:
             return
-        download_thumbnail(options, url)
+        download_thumbnails(options, [(False, url)])
+
+
+class MetadataThumbMixin(object):
+    """
+    Mix this into the service class to grab thumbnail from extracted metadata.
+    """
+    def get_thumbnail(self, options):
+        urls = []
+        if self.output["showthumbnailurl"] is not None:
+            urls.append((True, self.output["showthumbnailurl"]))
+        if self.output["episodethumbnailurl"] is not None:
+            urls.append((False, self.output["episodethumbnailurl"]))
+        if urls:
+            download_thumbnails(self.output, options, urls)
 
 
 class Generic(Service):
@@ -122,87 +134,87 @@ class Generic(Service):
             for i in sites:
                 if i.handles(url):
                     url = url.replace("&amp;", "&").replace("&#038;", "&")
-                    return url, i(self.options, url)
+                    return url, i(self.config, url)
 
         match = re.search(r"src=\"(http://player.vimeo.com/video/[0-9]+)\" ", data)
         if match:
             for i in sites:
                 if i.handles(match.group(1)):
-                    return match.group(1), i(self.options, url)
+                    return match.group(1), i(self.config, url)
         match = re.search(r"tv4play.se/iframe/video/(\d+)?", data)
         if match:
             url = "http://www.tv4play.se/?video_id=%s" % match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return url, i(self.options, url)
+                    return url, i(self.config, url)
         match = re.search(r"embed.bambuser.com/broadcast/(\d+)", data)
         if match:
             url = "http://bambuser.com/v/%s" % match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return url, i(self.options, url)
+                    return url, i(self.config, url)
         match = re.search(r'src="(http://tv.aftonbladet[^"]*)"', data)
         if match:
             url = match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return url, i(self.options, url)
+                    return url, i(self.config, url)
         match = re.search(r'a href="(http://tv.aftonbladet[^"]*)" class="abVi', data)
         if match:
             url = match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return url, i(self.options, url)
+                    return url, i(self.config, url)
 
         match = re.search(r"iframe src='(http://www.svtplay[^']*)'", data)
         if match:
             url = match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return url, i(self.options, url)
+                    return url, i(self.config, url)
 
         match = re.search('src="(http://mm-resource-service.herokuapp.com[^"]*)"', data)
         if match:
             url = match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return self.url, i(self.options, self.url)
+                    return self.url, i(self.config, self.url)
         match = re.search(r'src="([^.]+\.solidtango.com[^"+]+)"', data)
         if match:
             url = match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return self.url, i(self.options, url)
+                    return self.url, i(self.config, url)
         match = re.search('(lemonwhale|lwcdn.com)', data)
         if match:
             url = "http://lemonwhale.com"
             for i in sites:
                 if i.handles(url):
-                    return self.url, i(self.options, self.url)
+                    return self.url, i(self.config, self.url)
         match = re.search('s.src="(https://csp-ssl.picsearch.com[^"]+|http://csp.picsearch.com/rest[^"]+)', data)
         if match:
             url = match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return self.url, i(self.options, self.url)
+                    return self.url, i(self.config, self.url)
         match = re.search('(picsearch_ajax_auth|screen9-ajax-auth)', data)
         if match:
             url = "http://csp.picsearch.com"
             for i in sites:
                 if i.handles(url):
-                    return self.url, i(self.options, self.url)
+                    return self.url, i(self.config, self.url)
         match = re.search('iframe src="(//csp.screen9.com[^"]+)"', data)
         if match:
             url = "http:%s" % match.group(1)
             for i in sites:
                 if i.handles(url):
-                    return self.url, i(self.options, self.url)
+                    return self.url, i(self.config, self.url)
 
         match = re.search('source src="([^"]+)" type="application/x-mpegURL"', data)
         if match:
             for i in sites:
                 if i.__name__ == "Raw":
-                    return self.url, i(self.options, match.group(1))
+                    return self.url, i(self.config, match.group(1))
 
         return self.url, stream
 
