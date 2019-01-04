@@ -4,7 +4,7 @@ all: svtplay-dl
         release clean_releasedir $(RELEASE_DIR)
 
 # These variables describe the latest release:
-export VERSION = 1.9.11
+export VERSION = 2.1
 LATEST_RELEASE = $(VERSION)
 
 # Compress the manual if MAN_GZIP is set to y,
