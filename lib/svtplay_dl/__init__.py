@@ -1,33 +1,38 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
-from __future__ import absolute_import, unicode_literals
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
-import sys
 import logging
-import yaml
+import sys
 
-from svtplay_dl.utils.parser import setup_defaults, parser, parsertoconfig
-from svtplay_dl.utils.getmedia import get_media, get_multiple_media
+import yaml
 from svtplay_dl.service.cmore import Cmore
+from svtplay_dl.utils.getmedia import get_media
+from svtplay_dl.utils.getmedia import get_multiple_media
+from svtplay_dl.utils.parser import parser
+from svtplay_dl.utils.parser import parsertoconfig
+from svtplay_dl.utils.parser import setup_defaults
 
 from .__version__ import get_versions
-__version__ = get_versions()['version']
+
+__version__ = get_versions()["version"]
 del get_versions
 
 
-log = logging.getLogger('svtplay_dl')
+log = logging.getLogger("svtplay_dl")
 
 
 def setup_log(silent, verbose=False):
     logging.addLevelName(25, "INFO")
-    fmt = '%(levelname)s: %(message)s'
+    fmt = "%(levelname)s: %(message)s"
     if silent:
         stream = sys.stderr
         level = 25
     elif verbose:
         stream = sys.stderr
         level = logging.DEBUG
-        fmt = '%(levelname)s [%(created)s] %(pathname)s/%(funcName)s: %(message)s'
+        fmt = "%(levelname)s [%(created)s] %(pathname)s/%(funcName)s: %(message)s"
     else:
         stream = sys.stdout
         level = logging.INFO
@@ -67,5 +72,5 @@ def main():
     except KeyboardInterrupt:
         print("")
     except (yaml.YAMLError, yaml.MarkedYAMLError) as e:
-        logging.error('Your settings file(s) contain invalid YAML syntax! Please fix and restart!, {}'.format(str(e)))
+        logging.error("Your settings file(s) contain invalid YAML syntax! Please fix and restart!, {}".format(str(e)))
         sys.exit(2)

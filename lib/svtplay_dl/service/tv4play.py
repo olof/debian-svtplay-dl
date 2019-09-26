@@ -1,18 +1,22 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
-from __future__ import absolute_import, unicode_literals
-import re
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
 import json
-from datetime import datetime, timedelta
+import re
+from datetime import datetime
+from datetime import timedelta
 from urllib.parse import urlparse
 
-from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.error import ServiceError
+from svtplay_dl.fetcher.hls import hlsparse
+from svtplay_dl.service import OpenGraphThumbMixin
+from svtplay_dl.service import Service
 
 
 class Tv4play(Service, OpenGraphThumbMixin):
-    supported_domains = ['tv4play.se']
+    supported_domains = ["tv4play.se"]
 
     def get(self):
         parse = urlparse(self.url)
@@ -20,9 +24,9 @@ class Tv4play(Service, OpenGraphThumbMixin):
             end_time_stamp = (datetime.utcnow() - timedelta(minutes=1, seconds=20)).replace(microsecond=0)
             start_time_stamp = end_time_stamp - timedelta(minutes=1)
 
-            url = "https://bbr-l2v.akamaized.net/live/{0}/master.m3u8?in={1}&out={2}?".format(parse.path[9:],
-                                                                                              start_time_stamp.isoformat(),
-                                                                                              end_time_stamp.isoformat())
+            url = "https://bbr-l2v.akamaized.net/live/{}/master.m3u8?in={}&out={}?".format(
+                parse.path[9:], start_time_stamp.isoformat(), end_time_stamp.isoformat()
+            )
 
             self.config.set("live", True)
             streams = hlsparse(self.config, self.http.request("get", url), url, output=self.output, hls_time_stamp=True)
@@ -36,36 +40,27 @@ class Tv4play(Service, OpenGraphThumbMixin):
             return
 
         jansson = json.loads(match.group(1))
-        vid = None
-        for i in jansson:
-            janson2 = json.loads(i["data"])
-            json.dumps(janson2)
-            if "videoAsset" in janson2["data"]:
-                vid = janson2["data"]["videoAsset"]["id"]
-                if janson2["data"]["videoAsset"]["is_drm_protected"]:
-                    yield ServiceError("We can't download DRM protected content from this site.")
-                    return
-                if janson2["data"]["videoAsset"]["is_live"]:
-                    self.config.set("live", True)
-                if janson2["data"]["videoAsset"]["season"] > 0:
-                    self.output["season"] = janson2["data"]["videoAsset"]["season"]
-                if janson2["data"]["videoAsset"]["episode"] > 0:
-                    self.output["episode"] = janson2["data"]["videoAsset"]["episode"]
-                self.output["title"] = janson2["data"]["videoAsset"]["program"]["name"]
-                self.output["episodename"] = janson2["data"]["videoAsset"]["title"]
-                vid = str(vid)
-                self.output["id"] = str(vid)
-            if "program" in janson2["data"] and vid is None:
-                if "contentfulPanels" in janson2["data"]["program"]:
-                    match = re.search(r"[\/-](\d+)$", self.url)
-                    if match and "panels" in janson2["data"]["program"]:
-                        for n in janson2["data"]["program"]["panels"]:
-                            for z in n["videoList"]["videoAssets"]:
-                                if z["id"] == int(match.group(1)):
-                                    vid = z["id"]
-                                    self.output["id"] = str(vid)
-                                    self.output["episodename"] = z["title"]
-                                    self.output["title"] = z["program"]["name"]
+        if "assetId" not in jansson["props"]["pageProps"]:
+            yield ServiceError("Cant find video id for the video")
+            return
+
+        vid = jansson["props"]["pageProps"]["assetId"]
+        janson2 = jansson["props"]["apolloState"]
+        item = janson2["VideoAsset:{}".format(vid)]
+
+        if item["is_drm_protected"]:
+            yield ServiceError("We can't download DRM protected content from this site.")
+            return
+
+        if item["live"]:
+            self.config.set("live", True)
+        if item["season"] > 0:
+            self.output["season"] = item["season"]
+        if item["episode"] > 0:
+            self.output["episode"] = item["episode"]
+        self.output["title"] = item["program_nid"]
+        self.output["episodename"] = item["title"]
+        self.output["id"] = str(vid)
 
         if vid is None:
             yield ServiceError("Cant find video id for the video")
@@ -77,13 +72,18 @@ class Tv4play(Service, OpenGraphThumbMixin):
             yield ServiceError("Can't play this because the video is geoblocked or not available.")
             return
         if res.json()["playbackItem"]["type"] == "hls":
-            streams = hlsparse(self.config, self.http.request("get", res.json()["playbackItem"]["manifestUrl"]),
-                               res.json()["playbackItem"]["manifestUrl"], output=self.output, httpobject=self.http)
+            streams = hlsparse(
+                self.config,
+                self.http.request("get", res.json()["playbackItem"]["manifestUrl"]),
+                res.json()["playbackItem"]["manifestUrl"],
+                output=self.output,
+                httpobject=self.http,
+            )
             for n in list(streams.keys()):
                 yield streams[n]
 
     def _getjson(self):
-        match = re.search(r".prefetched = (\[.*\]);", self.get_urldata())
+        match = re.search(r"application\/json\">(.*\}\})<\/script><script ", self.get_urldata())
         return match
 
     def find_all_episodes(self, config):
@@ -92,31 +92,27 @@ class Tv4play(Service, OpenGraphThumbMixin):
         show = None
         match = self._getjson()
         jansson = json.loads(match.group(1))
-        for i in jansson:
-            janson2 = json.loads(i["data"])
-            if "program" in janson2["data"]:
-                if "programPanels" in janson2["data"]["program"]:
-                    for n in janson2["data"]["program"]["programPanels"]["panels"]:
-                        if n.get("assetType", None) == "EPISODE":
-                            for z in n["videoList"]["videoAssets"]:
-                                show = z["program_nid"]
-                                items.append(z["id"])
-                        if n.get("assetType", None) == "CLIP" and config.get("include_clips"):
-                            for z in n["videoList"]["videoAssets"]:
-                                show = z["program_nid"]
-                                items.append(z["id"])
+        janson2 = jansson["props"]["apolloState"]
+        for i in janson2:
+            if "VideoAsset:" in i:
+                if janson2[i]["clip"] and config.get("include_clips"):
+                    show = janson2[i]["program_nid"]
+                    items.append(janson2[i]["id"])
+                elif janson2[i]["clip"] is False:
+                    show = janson2[i]["program_nid"]
+                    items.append(janson2[i]["id"])
 
         items = sorted(items)
         for item in items:
             episodes.append("https://www.tv4play.se/program/{}/{}".format(show, item))
 
         if config.get("all_last") > 0:
-            return episodes[-config.get("all_last"):]
+            return episodes[-config.get("all_last") :]
         return episodes
 
 
 class Tv4(Service, OpenGraphThumbMixin):
-    supported_domains = ['tv4.se']
+    supported_domains = ["tv4.se"]
 
     def get(self):
         match = re.search(r"[\/-](\d+)$", self.url)
@@ -143,7 +139,11 @@ class Tv4(Service, OpenGraphThumbMixin):
             yield ServiceError("Can't play this because the video is geoblocked.")
             return
         if res.json()["playbackItem"]["type"] == "hls":
-            streams = hlsparse(self.config, self.http.request("get", res.json()["playbackItem"]["manifestUrl"]),
-                               res.json()["playbackItem"]["manifestUrl"], output=self.output)
+            streams = hlsparse(
+                self.config,
+                self.http.request("get", res.json()["playbackItem"]["manifestUrl"]),
+                res.json()["playbackItem"]["manifestUrl"],
+                output=self.output,
+            )
             for n in list(streams.keys()):
                 yield streams[n]

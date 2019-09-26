@@ -1,10 +1,12 @@
 from __future__ import absolute_import
-import re
-import json
 
-from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.fetcher.hls import hlsparse
+import json
+import re
+
 from svtplay_dl.error import ServiceError
+from svtplay_dl.fetcher.hls import hlsparse
+from svtplay_dl.service import OpenGraphThumbMixin
+from svtplay_dl.service import Service
 
 
 class Viasatsport(Service, OpenGraphThumbMixin):
@@ -19,7 +21,7 @@ class Viasatsport(Service, OpenGraphThumbMixin):
         dataj = json.loads(match.group(1))
         vid = dataj["dataSources"]["article"][0]["videos"][0]["data"]["mediaGuid"]
 
-        url = "https://viasport.mtg-api.com/stream-links/viasport/web/se/clear-media-guids/{0}/streams".format(vid)
+        url = "https://viasport.mtg-api.com/stream-links/viasport/web/se/clear-media-guids/{}/streams".format(vid)
         data = self.http.get(url)
         dataj = data.json()
         hls = dataj["embedded"]["prioritizedStreams"][0]["links"]["stream"]["href"]

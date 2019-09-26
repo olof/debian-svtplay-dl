@@ -1,23 +1,26 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import re
+
 import copy
 import hashlib
-from urllib.parse import urlparse, parse_qs
+import logging
+import re
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
 
-from svtplay_dl.service import Service, OpenGraphThumbMixin
 from svtplay_dl.error import ServiceError
-from svtplay_dl.log import log
+from svtplay_dl.fetcher.dash import dashparse
 from svtplay_dl.fetcher.hds import hdsparse
 from svtplay_dl.fetcher.hls import hlsparse
-from svtplay_dl.fetcher.dash import dashparse
-from svtplay_dl.utils.text import decode_html_entities
+from svtplay_dl.service import OpenGraphThumbMixin
+from svtplay_dl.service import Service
 from svtplay_dl.subtitle import subtitle
+from svtplay_dl.utils.text import decode_html_entities
 
 
 class OppetArkiv(Service, OpenGraphThumbMixin):
-    supported_domains = ['oppetarkiv.se']
+    supported_domains = ["oppetarkiv.se"]
 
     def get(self):
         vid = self.find_video_id()
@@ -25,10 +28,10 @@ class OppetArkiv(Service, OpenGraphThumbMixin):
             yield ServiceError("Cant find video id for this video")
             return
 
-        url = "http://api.svt.se/videoplayer-api/video/{0}".format(vid)
+        url = "http://api.svt.se/videoplayer-api/video/{}".format(vid)
         data = self.http.request("get", url)
         if data.status_code == 404:
-            yield ServiceError("Can't get the json file for {0}".format(url))
+            yield ServiceError("Can't get the json file for {}".format(url))
             return
 
         data = data.json()
@@ -68,9 +71,12 @@ class OppetArkiv(Service, OpenGraphThumbMixin):
                     if "alt" in query and len(query["alt"]) > 0:
                         alt = self.http.get(query["alt"][0])
                         if alt:
-                            streams = hdsparse(self.config,
-                                               self.http.request("get", alt.request.url, params={"hdcore": "3.7.0"}),
-                                               alt.request.url, output=self.output)
+                            streams = hdsparse(
+                                self.config,
+                                self.http.request("get", alt.request.url, params={"hdcore": "3.7.0"}),
+                                alt.request.url,
+                                output=self.output,
+                            )
                             for n in list(streams.keys()):
                                 yield streams[n]
             if i["format"] == "dash264" or i["format"] == "dashhbbtv":
@@ -98,7 +104,7 @@ class OppetArkiv(Service, OpenGraphThumbMixin):
         if match is None:
             match = re.search(r'"http://www.oppetarkiv.se/etikett/titel/([^/]+)/', self.url)
             if match is None:
-                log.error("Couldn't find title")
+                logging.error("Couldn't find title")
                 return
         program = match.group(1)
         episodes = []
@@ -110,7 +116,7 @@ class OppetArkiv(Service, OpenGraphThumbMixin):
             sort = "tid_stigande"
 
         while True:
-            url = "http://www.oppetarkiv.se/etikett/titel/{0}/?sida={1}&sort={2}&embed=true".format(program, page, sort)
+            url = "http://www.oppetarkiv.se/etikett/titel/{}/?sida={}&sort={}&embed=true".format(program, page, sort)
             data = self.http.request("get", url)
             if data.status_code == 404:
                 break
@@ -120,7 +126,7 @@ class OppetArkiv(Service, OpenGraphThumbMixin):
             for match in regex.finditer(data):
                 if n == self.config.get("all_last"):
                     break
-                episodes.append("http://www.oppetarkiv.se{0}".format(match.group(1)))
+                episodes.append("http://www.oppetarkiv.se{}".format(match.group(1)))
                 n += 1
             page += 1
 
@@ -149,10 +155,10 @@ class OppetArkiv(Service, OpenGraphThumbMixin):
 
     def name(selfs, data):
         if data.find(" - S.song") > 0:
-            title = data[:data.find(" - S.song")]
+            title = data[: data.find(" - S.song")]
         else:
             if data.find(" - Avsnitt") > 0:
-                title = data[:data.find(" - Avsnitt")]
+                title = data[: data.find(" - Avsnitt")]
             else:
                 title = data
         return title

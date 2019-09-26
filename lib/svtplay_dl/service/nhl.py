@@ -1,15 +1,17 @@
 from __future__ import absolute_import
-import re
+
 import json
+import re
 from urllib.parse import urljoin
 
-from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.error import ServiceError
+from svtplay_dl.fetcher.hls import hlsparse
+from svtplay_dl.service import OpenGraphThumbMixin
+from svtplay_dl.service import Service
 
 
 class NHL(Service, OpenGraphThumbMixin):
-    supported_domains = ['nhl.com']
+    supported_domains = ["nhl.com"]
 
     def get(self):
         match = re.search(r"var initialMedia\s+= ({[^;]+);", self.get_urldata())
@@ -39,8 +41,9 @@ class NHL(Service, OpenGraphThumbMixin):
             except KeyError:
                 yield ServiceError("Can't find api url")
                 return
-            filename = "{0}?contentId={1}&playbackScenario=HTTP_CLOUD_WIRED_WEB&format=json&platform=WEB_MEDIAPLAYER" \
-                       "&_=1487455224334".format(janson["vpm"]["mediaFramework"]["mediaFrameworkEndPoint"], vid)
+            filename = "{}?contentId={}&playbackScenario=HTTP_CLOUD_WIRED_WEB&format=json&platform=WEB_MEDIAPLAYER" "&_=1487455224334".format(
+                janson["vpm"]["mediaFramework"]["mediaFrameworkEndPoint"], vid
+            )
             url = urljoin(apiurl, filename)
             res = self.http.get(url)
             janson = res.json()

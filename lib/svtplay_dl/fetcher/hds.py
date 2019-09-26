@@ -1,21 +1,21 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
+
 import base64
-import struct
-import logging
 import binascii
 import copy
+import struct
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
-from svtplay_dl.utils.output import progressbar, progress_stream, ETA, output
+from svtplay_dl.error import ServiceError
 from svtplay_dl.error import UIException
 from svtplay_dl.fetcher import VideoRetriever
-from svtplay_dl.error import ServiceError
-
-
-log = logging.getLogger('svtplay_dl')
+from svtplay_dl.utils.output import ETA
+from svtplay_dl.utils.output import output
+from svtplay_dl.utils.output import progress_stream
+from svtplay_dl.utils.output import progressbar
 
 
 def _chr(temp):
@@ -25,13 +25,12 @@ def _chr(temp):
 class HDSException(UIException):
     def __init__(self, url, message):
         self.url = url
-        super(HDSException, self).__init__(message)
+        super().__init__(message)
 
 
 class LiveHDSException(HDSException):
     def __init__(self, url):
-        super(LiveHDSException, self).__init__(
-            url, "This is a live HDS stream, and they are not supported.")
+        super().__init__(url, "This is a live HDS stream, and they are not supported.")
 
 
 def hdsparse(config, res, manifest, output=None):
@@ -42,7 +41,7 @@ def hdsparse(config, res, manifest, output=None):
         return streams
 
     if res.status_code >= 400:
-        streams[0] = ServiceError("Can't read HDS playlist. {0}".format(res.status_code))
+        streams[0] = ServiceError("Can't read HDS playlist. {}".format(res.status_code))
         return streams
     data = res.text
 
@@ -61,13 +60,20 @@ def hdsparse(config, res, manifest, output=None):
             bootstrap["0"] = i.text
     parse = urlparse(manifest)
     querystring = parse.query
-    url = "{0}://{1}{2}".format(parse.scheme, parse.netloc, parse.path)
+    url = "{}://{}{}".format(parse.scheme, parse.netloc, parse.path)
     for i in mediaIter:
         bootstrapid = bootstrap[i.attrib["bootstrapInfoId"]]
-        streams[int(i.attrib["bitrate"])] = HDS(copy.copy(config), url, i.attrib["bitrate"], url_id=i.attrib["url"],
-                                                bootstrap=bootstrapid,
-                                                metadata=i.find("{http://ns.adobe.com/f4m/1.0}metadata").text,
-                                                querystring=querystring, cookies=res.cookies, output=output)
+        streams[int(i.attrib["bitrate"])] = HDS(
+            copy.copy(config),
+            url,
+            i.attrib["bitrate"],
+            url_id=i.attrib["url"],
+            bootstrap=bootstrapid,
+            metadata=i.find("{http://ns.adobe.com/f4m/1.0}metadata").text,
+            querystring=querystring,
+            cookies=res.cookies,
+            output=output,
+        )
     return streams
 
 
@@ -88,7 +94,7 @@ class HDS(VideoRetriever):
         antal = None
         if box[2] == b"abst":
             antal = readbox(bootstrap, box[0])
-        baseurl = self.url[0:self.url.rfind("/")]
+        baseurl = self.url[0 : self.url.rfind("/")]
 
         file_d = output(self.output, self.config, "flv")
         if file_d is None:
@@ -105,10 +111,10 @@ class HDS(VideoRetriever):
         total = antal[1]["total"]
         eta = ETA(total)
         while i <= total:
-            url = "{0}/{1}Seg1-Frag{2}?{3}".format(baseurl, self.kwargs["url_id"], start, querystring)
+            url = "{}/{}Seg1-Frag{}?{}".format(baseurl, self.kwargs["url_id"], start, querystring)
             if not self.config.get("silent"):
                 eta.update(i)
-                progressbar(total, i, ''.join(["ETA: ", str(eta)]))
+                progressbar(total, i, "".join(["ETA: ", str(eta)]))
             data = self.http.request("get", url, cookies=cookies)
             if data.status_code == 404:
                 break
@@ -120,7 +126,7 @@ class HDS(VideoRetriever):
 
         file_d.close()
         if not self.config.get("silent"):
-            progress_stream.write('\n')
+            progress_stream.write("\n")
         self.finished = True
 
 
@@ -322,6 +328,6 @@ def decode_f4f(fragID, fragData):
     start = fragData.find(b"mdat") + 4
     if fragID > 1:
         tagLen, = struct.unpack_from(">L", fragData, start)
-        tagLen &= 0x00ffffff
+        tagLen &= 0x00FFFFFF
         start += tagLen + 11 + 4
     return start

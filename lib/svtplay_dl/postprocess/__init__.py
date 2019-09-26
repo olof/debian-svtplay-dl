@@ -1,18 +1,20 @@
-from json import dumps
-from random import sample
+import logging
 import os
 import platform
 import re
-from shutil import which
-from requests import post, codes, Timeout
+from json import dumps
+from random import sample
 from re import match
+from shutil import which
 
-from svtplay_dl.log import log
+from requests import codes
+from requests import post
+from requests import Timeout
 from svtplay_dl.utils.output import formatname
 from svtplay_dl.utils.proc import run_program
 
 
-class postprocess(object):
+class postprocess:
     def __init__(self, stream, config, subfixes=None):
         self.stream = stream
         self.config = config
@@ -28,24 +30,23 @@ class postprocess(object):
         # https://github.com/riobard/srt.py/blob/master/srt.py
         def parse(self):
             def parse_block(block):
-                lines = block.strip('-').split('\n')
-                txt = '\r\n'.join(lines[2:])
+                lines = block.strip("-").split("\n")
+                txt = "\r\n".join(lines[2:])
                 return txt
 
             if platform.system() == "Windows":
                 fd = open(self, encoding="utf8")
             else:
                 fd = open(self)
-            return list(map(parse_block,
-                            fd.read().strip().replace('\r', '').split('\n\n')))
+            return list(map(parse_block, fd.read().strip().replace("\r", "").split("\n\n")))
 
         def query(self):
             _ = parse(self)
-            random_sentences = ' '.join(sample(_, len(_) if len(_) < 8 else 8)).replace('\r\n', '')
-            url = 'https://whatlanguage.herokuapp.com'
+            random_sentences = " ".join(sample(_, len(_) if len(_) < 8 else 8)).replace("\r\n", "")
+            url = "https://whatlanguage.herokuapp.com"
             payload = {"query": random_sentences}
             # Note: requests handles json from version 2.4.2 and onwards so i use json.dumps for now.
-            headers = {'content-type': 'application/json'}
+            headers = {"content-type": "application/json"}
             try:
                 # Note: reasonable timeout i guess? svtplay-dl is mainly used while multitasking i presume,
                 # and it is heroku after all (fast enough)
@@ -53,70 +54,64 @@ class postprocess(object):
                 if r.status_code == codes.ok:
                     try:
                         response = r.json()
-                        return response['language']
+                        return response["language"]
                     except TypeError:
-                        return 'und'
+                        return "und"
                 else:
-                    log.error("Server error appeared. Setting language as undetermined.")
-                    return 'und'
+                    logging.error("Server error appeared. Setting language as undetermined.")
+                    return "und"
             except Timeout:
-                log.error("30 seconds server timeout reached. Setting language as undetermined.")
-                return 'und'
+                logging.error("30 seconds server timeout reached. Setting language as undetermined.")
+                return "und"
 
         langs = []
-        exceptions = {
-            'lulesamiska': 'smj',
-            'meankieli': 'fit',
-            'jiddisch': 'yid'
-        }
+        exceptions = {"lulesamiska": "smj", "meankieli": "fit", "jiddisch": "yid"}
         if self.subfixes and len(self.subfixes) >= 2:
-            log.info("Determining the languages of the subtitles.")
+            logging.info("Determining the languages of the subtitles.")
         else:
-            log.info("Determining the language of the subtitle.")
+            logging.info("Determining the language of the subtitle.")
         if self.config.get("get_all_subtitles"):
             for subfix in self.subfixes:
-                if [exceptions[key] for key in exceptions.keys() if match(key, subfix.strip('-'))]:
-                    if 'oversattning' in subfix.strip('-'):
-                        subfix = subfix.strip('-').split('.')[0]
+                if [exceptions[key] for key in exceptions.keys() if match(key, subfix.strip("-"))]:
+                    if "oversattning" in subfix.strip("-"):
+                        subfix = subfix.strip("-").split(".")[0]
                     else:
-                        subfix = subfix.strip('-')
+                        subfix = subfix.strip("-")
                     langs += [exceptions[subfix]]
                     continue
-                subfile = "{0}.srt".format(os.path.splitext(formatname(self.stream.output, self.config,
-                                                                       self.stream.output_extention))[0] + subfix)
+                subfile = "{}.srt".format(os.path.splitext(formatname(self.stream.output, self.config, self.stream.output_extention))[0] + subfix)
                 langs += [query(subfile)]
         else:
-            subfile = "{0}.srt".format(os.path.splitext(formatname(self.stream.output, self.config,
-                                                                   self.stream.output_extention))[0])
+            subfile = "{}.srt".format(os.path.splitext(formatname(self.stream.output, self.config, self.stream.output_extention))[0])
             langs += [query(subfile)]
         if len(langs) >= 2:
-            log.info("Language codes: " + ', '.join(langs))
+            logging.info("Language codes: " + ", ".join(langs))
         else:
-            log.info("Language code: " + langs[0])
+            logging.info("Language code: " + langs[0])
         return langs
 
     def remux(self):
         if self.detect is None:
-            log.error("Cant detect ffmpeg or avconv. Cant mux files without it.")
+            logging.error("Cant detect ffmpeg or avconv. Cant mux files without it.")
             return
         if self.stream.finished is False:
             return
 
-        if formatname(self.stream.output, self.config, self.stream.output_extention).endswith('.mp4') is False:
+        if formatname(self.stream.output, self.config, self.stream.output_extention).endswith(".mp4") is False:
             orig_filename = formatname(self.stream.output, self.config, self.stream.output_extention)
             name, ext = os.path.splitext(orig_filename)
-            new_name = u"{0}.mp4".format(name)
+            new_name = "{}.mp4".format(name)
 
             cmd = [self.detect, "-i", orig_filename]
             _, stdout, stderr = run_program(cmd, False)  # return 1 is good here.
             videotrack, audiotrack = self._checktracks(stderr)
 
             if self.config.get("merge_subtitle"):
-                log.info(u"Muxing {0} and merging its subtitle into {1}".format(orig_filename, new_name))
+                logging.info("Muxing {} and merging its subtitle into {}".format(orig_filename, new_name))
             else:
-                log.info(u"Muxing {0} into {1}".format(orig_filename, new_name))
+                logging.info("Muxing {} into {}".format(orig_filename, new_name))
 
-            tempfile = u"{0}.temp".format(orig_filename)
+            tempfile = "{}.temp".format(orig_filename)
             arguments = ["-map", "0:{}".format(videotrack), "-map", "0:{}".format(audiotrack), "-c", "copy", "-f", "mp4"]
             if ext == ".ts":
                 arguments += ["-bsf:a", "aac_adtstoasc"]
@@ -124,14 +119,20 @@ class postprocess(object):
             if self.config.get("merge_subtitle"):
                 langs = self.sublanguage()
                 for stream_num, language in enumerate(langs):
-                    arguments += ["-map", str(stream_num + 1), "-c:s:" + str(stream_num), "mov_text",
-                                  "-metadata:s:s:" + str(stream_num), "language=" + language]
+                    arguments += [
+                        "-map",
+                        str(stream_num + 1),
+                        "-c:s:" + str(stream_num),
+                        "mov_text",
+                        "-metadata:s:s:" + str(stream_num),
+                        "language=" + language,
+                    ]
                 if self.subfixes and len(self.subfixes) >= 2:
                     for subfix in self.subfixes:
-                        subfile = "{0}.srt".format(name + subfix)
+                        subfile = "{}.srt".format(name + subfix)
                         cmd += ["-i", subfile]
                 else:
-                    subfile = "{0}.srt".format(name)
+                    subfile = "{}.srt".format(name)
                     cmd += ["-i", subfile]
 
             arguments += ["-y", tempfile]
@@ -141,21 +142,21 @@ class postprocess(object):
                 return
 
             if self.config.get("merge_subtitle") and not self.config.get("subtitle"):
-                log.info("Muxing done, removing the old files.")
+                logging.info("Muxing done, removing the old files.")
                 if self.subfixes and len(self.subfixes) >= 2:
                     for subfix in self.subfixes:
-                        subfile = "{0}.srt".format(name + subfix)
+                        subfile = "{}.srt".format(name + subfix)
                         os.remove(subfile)
                 else:
                     os.remove(subfile)
             else:
-                log.info("Muxing done, removing the old file.")
+                logging.info("Muxing done, removing the old file.")
             os.remove(orig_filename)
             os.rename(tempfile, new_name)
 
     def merge(self):
         if self.detect is None:
-            log.error("Cant detect ffmpeg or avconv. Cant mux files without it.")
+            logging.error("Cant detect ffmpeg or avconv. Cant mux files without it.")
             return
         if self.stream.finished is False:
             return
@@ -167,32 +168,38 @@ class postprocess(object):
         videotrack, audiotrack = self._checktracks(stderr)
 
         if self.config.get("merge_subtitle"):
-            log.info("Merge audio, video and subtitle into {0}".format(orig_filename))
+            logging.info("Merge audio, video and subtitle into {}".format(orig_filename))
         else:
-            log.info("Merge audio and video into {0}".format(orig_filename))
+            logging.info("Merge audio and video into {}".format(orig_filename))
 
-        tempfile = u"{0}.temp".format(orig_filename)
+        tempfile = "{}.temp".format(orig_filename)
         name, ext = os.path.splitext(orig_filename)
         arguments = ["-c:v", "copy", "-c:a", "copy", "-f", "mp4"]
         if ext == ".ts":
-            audio_filename = u"{0}.audio.ts".format(name)
+            audio_filename = "{}.audio.ts".format(name)
             arguments += ["-bsf:a", "aac_adtstoasc"]
         else:
-            audio_filename = u"{0}.m4a".format(name)
+            audio_filename = "{}.m4a".format(name)
         cmd = [self.detect, "-i", orig_filename, "-i", audio_filename]
 
+        arguments += ["-map", "{}".format(videotrack), "-map", "{}".format(audiotrack)]
         if self.config.get("merge_subtitle"):
             langs = self.sublanguage()
             for stream_num, language in enumerate(langs, start=audiotrack + 1):
-                arguments += ["-map", "{}".format(videotrack), "-map", "{}".format(audiotrack),
-                              "-map", str(stream_num), "-c:s:" + str(stream_num - 2), "mov_text",
-                              "-metadata:s:s:" + str(stream_num - 2), "language=" + language]
+                arguments += [
+                    "-map",
+                    str(stream_num),
+                    "-c:s:" + str(stream_num - 2),
+                    "mov_text",
+                    "-metadata:s:s:" + str(stream_num - 2),
+                    "language=" + language,
+                ]
             if self.subfixes and len(self.subfixes) >= 2:
                 for subfix in self.subfixes:
-                    subfile = "{0}.srt".format(name + subfix)
+                    subfile = "{}.srt".format(name + subfix)
                     cmd += ["-i", subfile]
             else:
-                subfile = "{0}.srt".format(name)
+                subfile = "{}.srt".format(name)
                 cmd += ["-i", subfile]
 
         arguments += ["-y", tempfile]
@@ -201,13 +208,13 @@ class postprocess(object):
         if returncode != 0:
             return
 
-        log.info("Merging done, removing old files.")
+        logging.info("Merging done, removing old files.")
         os.remove(orig_filename)
         os.remove(audio_filename)
         if self.config.get("merge_subtitle") and not self.config.get("subtitle"):
             if self.subfixes and len(self.subfixes) >= 2:
                 for subfix in self.subfixes:
-                    subfile = "{0}.srt".format(name + subfix)
+                    subfile = "{}.srt".format(name + subfix)
                     os.remove(subfile)
             else:
                 os.remove(subfile)

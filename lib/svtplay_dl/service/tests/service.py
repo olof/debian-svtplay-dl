@@ -1,27 +1,29 @@
 #!/usr/bin/python
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 # The unittest framwork doesn't play nice with pylint:
 #   pylint: disable-msg=C0103
-
 from __future__ import absolute_import
+
 import unittest
-from svtplay_dl.service import Service, service_handler, opengraph_get
+
+from svtplay_dl.service import opengraph_get
+from svtplay_dl.service import Service
+from svtplay_dl.service import service_handler
 from svtplay_dl.service.services import sites
 from svtplay_dl.utils.parser import setup_defaults
 
 
 class MockService(Service):
-    supported_domains = ['example.com', 'example.net']
+    supported_domains = ["example.com", "example.net"]
 
 
 class ServiceTest(unittest.TestCase):
     def test_supports(self):
-        self.assertTrue(MockService.handles('http://example.com/video.swf?id=1'))
-        self.assertTrue(MockService.handles('http://example.net/video.swf?id=1'))
-        self.assertTrue(MockService.handles('http://www.example.com/video.swf?id=1'))
-        self.assertTrue(MockService.handles('http://www.example.net/video.swf?id=1'))
+        self.assertTrue(MockService.handles("http://example.com/video.swf?id=1"))
+        self.assertTrue(MockService.handles("http://example.net/video.swf?id=1"))
+        self.assertTrue(MockService.handles("http://www.example.com/video.swf?id=1"))
+        self.assertTrue(MockService.handles("http://www.example.net/video.swf?id=1"))
 
 
 class service_handlerTest(unittest.TestCase):
