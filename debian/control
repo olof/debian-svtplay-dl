@@ -16,8 +16,8 @@ Depends: python3 (>= 3.4), python3-cryptography, python3-dateutil,
          ${misc:Depends}
 Suggests: python3-socks
 Architecture: all
-Description: program to download videos from video on demand sites
+Description: program to download videos from video sites
  svtplay-dl is a command line application for downloading videos
- from various video on demand sites (sometimes called "play"
- services). Currently supports some 15+ service, including
- SVTPlay, HBO, twitch.tv, vimeo and many more.
+ from various online video websites, with a special focus on nordic
+ or scandinavian services, like SVTplay, TV4play, Sveriges Radio,
+ Aftonbladet, DR, NRK, RUV and more.
