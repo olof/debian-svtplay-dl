@@ -4,14 +4,14 @@ Priority: optional
 Maintainer: Olof Johansson <olof@ethup.se>
 Standards-Version: 4.1.0
 Build-Depends: debhelper (>= 9), dpkg-dev (>= 1.17.0), git, zip, perl,
-               python3 (>= 3.4), python3-nose, python3-mock,
-               python3-requests, python3-yaml
+               python3 (>= 3.4), python3-cryptography, python3-nose,
+               python3-mock, python3-requests, python3-yaml
 Homepage: https://github.com/spaam/svtplay-dl
 Vcs-Git: git://github.com/olof/debian-svtplay-dl.git
 Vcs-Browser: https://github.com/olof/debian-svtplay-dl
 
 Package: svtplay-dl
-Depends: python3 (>= 3.4), python3-crypto, python3-requests,
+Depends: python3 (>= 3.4), python3-cryptography, python3-requests,
          python3-yaml, ffmpeg | libavtools, ${misc:Depends}
 Suggests: python3-socks
 Architecture: all
