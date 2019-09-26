@@ -1,17 +1,18 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import re
+
 import copy
+import re
 import xml.etree.ElementTree as ET
 
-from svtplay_dl.service import Service
-from svtplay_dl.fetcher.http import HTTP
 from svtplay_dl.error import ServiceError
+from svtplay_dl.fetcher.http import HTTP
+from svtplay_dl.service import Service
 
 
 class Mtvservices(Service):
-    supported_domains = ['colbertnation.com', 'thedailyshow.com']
+    supported_domains = ["colbertnation.com", "thedailyshow.com"]
 
     def get(self):
         data = self.get_urldata()
@@ -30,5 +31,5 @@ class Mtvservices(Service):
 
         for i in sa:
             temp = i.find("src").text.index("gsp.comedystor")
-            url = "http://mtvnmobile.vo.llnwd.net/kip0/_pxn=0+_pxK=18639+_pxE=mp4/44620/mtvnorigin/{0}".format(i.find("src").text[temp:])
+            url = "http://mtvnmobile.vo.llnwd.net/kip0/_pxn=0+_pxK=18639+_pxE=mp4/44620/mtvnorigin/{}".format(i.find("src").text[temp:])
             yield HTTP(copy.copy(self.config), url, i.attrib["height"], output=self.output)

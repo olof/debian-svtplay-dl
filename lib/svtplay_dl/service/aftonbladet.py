@@ -1,13 +1,14 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import re
-import json
 
-from svtplay_dl.service import Service
-from svtplay_dl.utils.text import decode_html_entities
+import json
+import re
+
 from svtplay_dl.error import ServiceError
 from svtplay_dl.fetcher.hls import hlsparse
+from svtplay_dl.service import Service
+from svtplay_dl.utils.text import decode_html_entities
 
 
 class Aftonbladettv(Service):
@@ -34,7 +35,7 @@ class Aftonbladet(Service):
     def get(self):
         data = self.get_urldata()
 
-        match = re.search('window.FLUX_STATE = ({.*})</script>', data)
+        match = re.search("window.FLUX_STATE = ({.*})</script>", data)
         if not match:
             yield ServiceError("Can't find video info")
             return
@@ -42,12 +43,11 @@ class Aftonbladet(Service):
         try:
             janson = json.loads(match.group(1))
         except json.decoder.JSONDecodeError:
-            yield ServiceError("Can't decode api request: {0}".format(match.group(1)))
+            yield ServiceError("Can't decode api request: {}".format(match.group(1)))
             return
 
         videos = self._get_video(janson)
-        for i in videos:
-            yield i
+        yield from videos
 
     def _get_video(self, janson):
         collections = janson["collections"]
@@ -55,7 +55,11 @@ class Aftonbladet(Service):
             contents = collections[n]["contents"]["items"]
             for i in list(contents.keys()):
                 if "type" in contents[i] and contents[i]["type"] == "video":
-                    streams = hlsparse(self.config, self.http.request("get", contents[i]["videoAsset"]["streamUrls"]["hls"]),
-                                       contents[i]["videoAsset"]["streamUrls"]["hls"], output=self.output)
+                    streams = hlsparse(
+                        self.config,
+                        self.http.request("get", contents[i]["videoAsset"]["streamUrls"]["hls"]),
+                        contents[i]["videoAsset"]["streamUrls"]["hls"],
+                        output=self.output,
+                    )
                     for key in list(streams.keys()):
                         yield streams[key]

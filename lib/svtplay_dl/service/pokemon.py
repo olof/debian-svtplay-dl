@@ -1,26 +1,27 @@
 from __future__ import absolute_import
+
 import re
 from urllib.parse import urlparse
 
-
-from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.error import ServiceError
+from svtplay_dl.fetcher.hls import hlsparse
+from svtplay_dl.service import OpenGraphThumbMixin
+from svtplay_dl.service import Service
 
 
 class Pokemon(Service, OpenGraphThumbMixin):
-    supported_domains = ['pokemon.com']
+    supported_domains = ["pokemon.com"]
 
     def get(self):
         data = self.get_urldata()
 
         parse = urlparse(self.url)
-        match = re.search(r'^/([a-z]{2})/', parse.path)
+        match = re.search(r"^/([a-z]{2})/", parse.path)
         if not match:
             yield ServiceError("Cant county code")
             return
 
-        res = self.http.get("http://www.pokemon.com/api/pokemontv/channels?region={0}".format(match.group(1)))
+        res = self.http.get("http://www.pokemon.com/api/pokemontv/channels?region={}".format(match.group(1)))
         janson = res.json()
         match = re.search('data-video-season="([0-9]+)"', data)
         season = match.group(1)

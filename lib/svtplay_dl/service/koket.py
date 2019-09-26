@@ -1,11 +1,14 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
-from __future__ import absolute_import, unicode_literals
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
 from urllib.parse import urlparse
 
-from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.fetcher.hls import hlsparse
 from svtplay_dl.error import ServiceError
+from svtplay_dl.fetcher.hls import hlsparse
+from svtplay_dl.service import OpenGraphThumbMixin
+from svtplay_dl.service import Service
 
 
 def findCourse(data, courseSlug):
@@ -23,7 +26,7 @@ def findLesson(course, lessonSlug):
 
 
 class Koket(Service, OpenGraphThumbMixin):
-    supported_domains = ['koket.se']
+    supported_domains = ["koket.se"]
     supported_path = "/kurser"
 
     def __init__(self, config, _url, http=None):
@@ -32,7 +35,7 @@ class Koket(Service, OpenGraphThumbMixin):
 
     def get(self):
         urlp = urlparse(self.url)
-        slugs = urlp.path.split('/')
+        slugs = urlp.path.split("/")
 
         courseSlug = slugs[2]
         lessonSlug = slugs[3]
@@ -66,8 +69,12 @@ class Koket(Service, OpenGraphThumbMixin):
 
         videoDataRes = self.http.get(url)
         if videoDataRes.json()["playbackItem"]["type"] == "hls":
-            streams = hlsparse(self.config, self.http.get(videoDataRes.json()["playbackItem"]["manifestUrl"]),
-                               videoDataRes.json()["playbackItem"]["manifestUrl"], output=self.output)
+            streams = hlsparse(
+                self.config,
+                self.http.get(videoDataRes.json()["playbackItem"]["manifestUrl"]),
+                videoDataRes.json()["playbackItem"]["manifestUrl"],
+                output=self.output,
+            )
             for n in list(streams.keys()):
                 yield streams[n]
 
@@ -80,10 +87,7 @@ class Koket(Service, OpenGraphThumbMixin):
                 return False
 
             url = "https://www.koket.se/account/login"
-            login = {
-                "username": username,
-                "password": password
-            }
+            login = {"username": username, "password": password}
 
             self.http.get(url)
             self.http.post(url, data=login)

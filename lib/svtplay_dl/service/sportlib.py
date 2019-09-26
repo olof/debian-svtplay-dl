@@ -1,16 +1,19 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 from __future__ import absolute_import
-import re
-from urllib.parse import urljoin, urlparse
 
-from svtplay_dl.service import Service, OpenGraphThumbMixin
-from svtplay_dl.fetcher.hls import hlsparse
+import re
+from urllib.parse import urljoin
+from urllib.parse import urlparse
+
 from svtplay_dl.error import ServiceError
+from svtplay_dl.fetcher.hls import hlsparse
+from svtplay_dl.service import OpenGraphThumbMixin
+from svtplay_dl.service import Service
 
 
 class Sportlib(Service, OpenGraphThumbMixin):
-    supported_domains = ['sportlib.se']
+    supported_domains = ["sportlib.se"]
 
     def get(self):
         data = self.http.get("https://www.sportlib.se/sportlib/login").text
@@ -35,8 +38,13 @@ class Sportlib(Service, OpenGraphThumbMixin):
         janson = res.json()
         sid = janson["data"][0]["id"]
 
-        data = {"client_id": cid, "client_secret": cs, "grant_type": "password",
-                "username": self.config.get("username"), "password": self.config.get("password")}
+        data = {
+            "client_id": cid,
+            "client_secret": cs,
+            "grant_type": "password",
+            "username": self.config.get("username"),
+            "password": self.config.get("password"),
+        }
         res = self.http.post("https://core.oz.com/oauth2/token?channelId={}".format(sid), data=data)
         if res.status_code > 200:
             yield ServiceError("Wrong username / password?")
