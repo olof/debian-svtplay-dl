@@ -54,7 +54,10 @@ class Options:
 
 
 def gen_parser(version='unknown'):
-    parser = argparse.ArgumentParser(prog="svtplay-dl")
+    parser = argparse.ArgumentParser(
+        prog="svtplay-dl",
+    )
+    parser.man_short_description = "Download videos from your favourite play services"
     general = parser.add_argument_group()
 
     general.add_argument("--version", action="version", version="%(prog)s {}".format(version))
