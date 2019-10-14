@@ -16,3 +16,19 @@ export TEST_OPTS=-3
 
 %:
 	dh $@
+
+svtplay-dl.1:
+	argparse-manpage \
+		--project-name svtplay-dl \
+		--author 'Johan Andersson' \
+		--author-email 'j@i19.se' \
+		--pyfile lib/svtplay_dl/utils/parser.py \
+		--function gen_parser \
+		--url https://svtplay-dl.se/ \
+		--output svtplay-dl.1
+
+svtplay-dl.1.gz: svtplay-dl.1
+	gzip --best $<
+
+override_dh_installman: svtplay-dl.1.gz
+	dh_installman
