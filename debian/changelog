@@ -1,3 +1,18 @@
+svtplay-dl (2.4-1) unstable; urgency=medium
+
+  * New upstream version 2.4 (Closes: #925301)
+    * debian/control: Remove rtmpdump dependency
+    * debian/control: Add suggestion for python3-socks
+    * debian/control: Change python3-crypto dep to python3-cryptography
+    * debian/control: Add python3-dateutil dependency
+    * Generate manpage with python3-argparse-manpage
+      * debian/control: Add python3-argparse-manpage build-dep
+      * debian/rules: Make use of python3-argparse-manpage
+      * __init__: Allow sideeffect free access to argparse object
+  * debian/control: Update description
+
+ -- Olof Johansson <olof@ethup.se>  Mon, 14 Oct 2019 08:58:38 +0200
+
 svtplay-dl (2.1-1) unstable; urgency=medium
 
   * New upstream version 2.1
