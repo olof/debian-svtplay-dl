@@ -1,5 +1,7 @@
 #!/usr/bin/make -f
 
+include /usr/share/dpkg/pkg-info.mk
+
 export LC_ALL=C.UTF-8
 export PREFIX=/usr
 
@@ -13,6 +15,8 @@ export PYTHON=/usr/bin/python3
 ## We don't want to build-depend on python2 *and* python3, so we override
 ## upstream's default of running the test suite on both.
 export TEST_OPTS=-3
+
+export MAKEFLAGS = -e VERSION=$(DEB_VERSION)
 
 %:
 	dh $@

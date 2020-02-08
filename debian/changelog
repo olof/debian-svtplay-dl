@@ -1,3 +1,10 @@
+svtplay-dl (2.4-2) unstable; urgency=medium
+
+  * Improve --version flag handling by automatically overriding it
+    with the debian version. The 2.4-1 version said "-unknown".
+
+ -- Olof Johansson <olof@ethup.se>  Sun, 09 Feb 2020 00:11:08 +0200
+
 svtplay-dl (2.4-1) unstable; urgency=medium
 
   * New upstream version 2.4 (Closes: #925301)
