@@ -8,8 +8,8 @@ Build-Depends: debhelper (>= 9), dpkg-dev (>= 1.17.0), git, zip, perl,
                python3-dateutil, python3-nose, python3-mock, python3-requests,
                python3-yaml
 Homepage: https://github.com/spaam/svtplay-dl
-Vcs-Git: git://github.com/olof/debian-svtplay-dl.git
-Vcs-Browser: https://github.com/olof/debian-svtplay-dl
+Vcs-Git: https://salsa.debian.org/olof/svtplay-dl.git
+Vcs-Browser: https://salsa.debian.org/olof/svtplay-dl
 
 Package: svtplay-dl
 Depends: python3 (>= 3.4), python3-cryptography, python3-dateutil,
