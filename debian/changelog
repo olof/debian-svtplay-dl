@@ -2,6 +2,7 @@ svtplay-dl (2.4-3) UNRELEASED; urgency=medium
 
   * Use secure copyright file specification URI.
   * Bump debhelper from deprecated 9 to 12.
+  * Set debhelper-compat version in Build-Depends.
 
  -- Debian Janitor <janitor@jelmer.uk>  Tue, 05 May 2020 02:55:39 +0000
 
