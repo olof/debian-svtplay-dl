@@ -5,6 +5,7 @@ svtplay-dl (2.4-3) UNRELEASED; urgency=medium
   * Set debhelper-compat version in Build-Depends.
   * Set upstream metadata fields: Bug-Database, Bug-Submit, Repository,
     Repository-Browse.
+  * Update standards version to 4.1.1, no changes needed.
 
  -- Debian Janitor <janitor@jelmer.uk>  Tue, 05 May 2020 02:55:39 +0000
 
