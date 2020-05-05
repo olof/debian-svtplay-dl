@@ -1,5 +1,6 @@
 svtplay-dl (2.4-3) UNRELEASED; urgency=medium
 
+  [ Debian Janitor ]
   * Use secure copyright file specification URI.
   * Bump debhelper from deprecated 9 to 12.
   * Set debhelper-compat version in Build-Depends.
@@ -7,7 +8,10 @@ svtplay-dl (2.4-3) UNRELEASED; urgency=medium
     Repository-Browse.
   * Update standards version to 4.1.1, no changes needed.
 
- -- Debian Janitor <janitor@jelmer.uk>  Tue, 05 May 2020 02:55:39 +0000
+  [ Olof Johansson ]
+  * Update standards version further to 4.5.0, no changes needed.
+
+ -- Olof Johansson <olof@ethup.se>  Wed, 06 May 2020 00:13:30 +0200
 
 svtplay-dl (2.4-2) unstable; urgency=medium
 
