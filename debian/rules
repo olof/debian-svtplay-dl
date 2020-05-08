@@ -31,8 +31,5 @@ svtplay-dl.1:
 		--url https://svtplay-dl.se/ \
 		--output svtplay-dl.1
 
-svtplay-dl.1.gz: svtplay-dl.1
-	gzip --best $<
-
-override_dh_installman: svtplay-dl.1.gz
+override_dh_installman: svtplay-dl.1
 	dh_installman
