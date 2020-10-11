@@ -178,6 +178,8 @@ def get_one_media(stream):
     if stream.config.get("subtitle") and not stream.config.get("get_url"):
         options_subs_dl(subfixes)
         if stream.config.get("force_subtitle"):
+            if not subs:
+                logging.info("No subtitles available")
             return
 
     if stream.config.get("merge_subtitle") and not stream.config.get("subtitle"):
@@ -208,7 +210,7 @@ def get_one_media(stream):
             if fstream.config.get("get_url"):
                 print(fstream.url)
                 return
-            logging.info("Selected to download %s, bitrate: %s", fstream.name, fstream.bitrate)
+            logging.info("Selected to download %s, bitrate: %s format: %s", fstream.name, fstream.bitrate, fstream.format)
             fstream.download()
         except UIException as e:
             if fstream.config.get("verbose"):

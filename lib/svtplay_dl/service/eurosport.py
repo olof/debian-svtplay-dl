@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import json
 import re
 from urllib.parse import quote
@@ -78,7 +76,7 @@ class Eurosport(Service):
                 yield ServiceError("Cant find channel")
                 return
 
-            vid, = match.groups()
+            (vid,) = match.groups()
             query["pageType"] = pagetype
             query["channelCallsign"] = vid
             query["channelCallsigns"] = vid

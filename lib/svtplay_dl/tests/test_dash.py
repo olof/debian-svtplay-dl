@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import os
 import unittest
 
@@ -12,7 +10,7 @@ def parse(playlist):
     with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "dash-manifests", playlist)) as fd:
         manifest = fd.read()
 
-    return _dashparse(setup_defaults(), manifest, "http://localhost", None, None)
+    return _dashparse(setup_defaults(), manifest, "http://localhost", None)
 
 
 class dashtest(unittest.TestCase):

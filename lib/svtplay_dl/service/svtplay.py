@@ -1,18 +1,17 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
-from __future__ import absolute_import
-
 import copy
+import datetime
 import hashlib
 import json
 import logging
 import re
+import time
 from operator import itemgetter
 from urllib.parse import parse_qs
 from urllib.parse import urljoin
 from urllib.parse import urlparse
 
-import dateutil.parser
 from svtplay_dl.error import ServiceError
 from svtplay_dl.fetcher.dash import dashparse
 from svtplay_dl.fetcher.hls import hlsparse
@@ -88,7 +87,7 @@ class Svtplay(Service, MetadataThumbMixin):
     def _get_video(self, janson):
         if "subtitleReferences" in janson:
             for i in janson["subtitleReferences"]:
-                if i["format"] == "websrt" and "url" in i:
+                if i["format"] == "webvtt" and "url" in i:
                     yield subtitle(copy.copy(self.config), "wrst", i["url"], output=self.output)
 
         if "videoReferences" in janson:
@@ -104,11 +103,11 @@ class Svtplay(Service, MetadataThumbMixin):
                 if "alt" in query and len(query["alt"]) > 0:
                     alt = self.http.get(query["alt"][0])
 
-                if i["format"] == "hls":
+                if i["format"][:3] == "hls":
                     streams = hlsparse(self.config, self.http.request("get", i["url"]), i["url"], output=self.output)
                     if alt:
                         alt_streams = hlsparse(self.config, self.http.request("get", alt.request.url), alt.request.url, output=self.output)
-                elif i["format"] == "dash264" or i["format"] == "dashhbbtv":
+                elif i["format"][:4] == "dash":
                     streams = dashparse(self.config, self.http.request("get", i["url"]), i["url"], output=self.output)
                     if alt:
                         alt_streams = dashparse(self.config, self.http.request("get", alt.request.url), alt.request.url, output=self.output)
@@ -128,7 +127,10 @@ class Svtplay(Service, MetadataThumbMixin):
                 break
 
         if esceni:
-            return janson["ROOT_QUERY"][esceni][0]["id"]
+            try:
+                return janson["ROOT_QUERY"][esceni][0]["id"]
+            except IndexError:
+                return None
         else:
             return esceni
 
@@ -215,7 +217,7 @@ class Svtplay(Service, MetadataThumbMixin):
                         keys.append(i["id"])
 
             for i in keys:
-                for n in janson[i]["items"]:
+                for n in janson[i]['items({"filter":{"includeFullOppetArkiv":false}})']:
                     epi = janson[janson[n["id"]]["item"]["id"]]
                     if "variants" in epi:
                         for z in epi["variants"]:
@@ -303,7 +305,27 @@ class Svtplay(Service, MetadataThumbMixin):
 
         self.output["tvshow"] = self.output["season"] is not None and self.output["episode"] is not None
         if "validFrom" in episode:
-            self.output["publishing_datetime"] = int(dateutil.parser.parse(episode["validFrom"]).strftime("%s"))
+
+            def _fix_broken_timezone_implementation(value):
+                # cx_freeze cant include .zip file for dateutil and < py37 have issues with timezones with : in it
+                if "+" in value and ":" == value[-3:-2]:
+                    value = value[:-3] + value[-2:]
+                return value
+
+            validfrom = episode["validFrom"]
+            if "+" in validfrom:
+                date = time.mktime(
+                    datetime.datetime.strptime(
+                        _fix_broken_timezone_implementation(episode["validFrom"].replace("Z", "")), "%Y-%m-%dT%H:%M:%S%z"
+                    ).timetuple()
+                )
+            else:
+                date = time.mktime(
+                    datetime.datetime.strptime(
+                        _fix_broken_timezone_implementation(episode["validFrom"].replace("Z", "")), "%Y-%m-%dT%H:%M:%S"
+                    ).timetuple()
+                )
+            self.output["publishing_datetime"] = int(date)
 
         self.output["title_nice"] = data[data[visibleid]["parent"]["id"]]["name"]
 
