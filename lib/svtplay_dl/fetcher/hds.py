@@ -1,7 +1,5 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
-from __future__ import absolute_import
-
 import base64
 import binascii
 import copy
@@ -327,7 +325,7 @@ def readasrtbox(data, pos):
 def decode_f4f(fragID, fragData):
     start = fragData.find(b"mdat") + 4
     if fragID > 1:
-        tagLen, = struct.unpack_from(">L", fragData, start)
+        (tagLen,) = struct.unpack_from(">L", fragData, start)
         tagLen &= 0x00FFFFFF
         start += tagLen + 11 + 4
     return start

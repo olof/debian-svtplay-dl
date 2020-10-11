@@ -1,7 +1,5 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
-from __future__ import absolute_import
-
 import hashlib
 import logging
 import random
@@ -27,20 +25,25 @@ class Dplay(Service):
         if not self._token():
             logging.error("Something went wrong getting token for requests")
 
-        if self.config.get("username") and self.config.get("password"):
-            premium = self._login()
-            if not premium:
-                logging.warning("Wrong username/password.")
+        if not self._login():
+            yield ServiceError("Need the 'st' cookie to work")
+            return
 
         channel = False
         if "kanaler" in parse.path:
             match = re.search("kanaler/([^/]+)$", parse.path)
+            if not match:
+                yield ServiceError("Can't detect 'kanaler'")
+                return
             path = "/channels/{}".format(match.group(1))
             url = "https://disco-api.{}/content{}".format(self.domain, path)
             channel = True
             self.config.set("live", True)
         elif "program" in parse.path:
             match = re.search("(programmer|program)/([^/]+)$", parse.path)
+            if not match:
+                yield ServiceError("Can't find program url")
+                return
             path = "/shows/{}".format(match.group(2))
             url = "https://disco-api.{}/content{}".format(self.domain, path)
             res = self.http.get(url, headers={"x-disco-client": "WEB:UNKNOWN:dplay-client:0.0.1"})
@@ -81,7 +84,7 @@ class Dplay(Service):
             return
         self.output["id"] = janson["data"]["id"]
 
-        api = "https://disco-api.{}/playback/videoPlaybackInfo/{}".format(self.domain, janson["data"]["id"])
+        api = "https://disco-api.{}/playback/videoPlaybackInfo/{}?usePreAuth=true".format(self.domain, janson["data"]["id"])
         res = self.http.get(api)
         if res.status_code > 400:
             yield ServiceError("You dont have permission to watch this")
@@ -114,56 +117,73 @@ class Dplay(Service):
     def find_all_episodes(self, config):
         parse = urlparse(self.url)
         self.domain = re.search(r"(dplay\.\w\w)", parse.netloc).group(1)
-
+        programid = None
+        seasons = []
         match = re.search("^/(program|programmer|videos|videoer)/([^/]+)", parse.path)
         if not match:
             logging.error("Can't find show name")
             return None
 
+        if not self._login():
+            logging.error("Need the 'st' cookie to work")
+            return None
+
         if not self._token():
             logging.error("Something went wrong getting token for requests")
 
-        premium = False
-        if self.config.get("username") and self.config.get("password"):
-            premium = self._login()
-            if not premium:
-                logging.warning("Wrong username/password.")
-
-        url = "https://disco-api.{}/content/shows/{}".format(self.domain, match.group(2))
+        premium = self._checkpremium()
+        url = "http://disco-api.{}/cms/routes/program/{}?decorators=viewingHistory&include=default".format(self.domain, match.group(2))
         res = self.http.get(url)
-        programid = res.json()["data"]["id"]
-        seasons = res.json()["data"]["attributes"]["seasonNumbers"]
+        for what in res.json()["included"]:
+            if "attributes" in what and "alias" in what["attributes"] and "season" in what["attributes"]["alias"]:
+                programid = what["id"]
+                for ses in what["attributes"]["component"]["filters"]:
+                    if ses["id"] == "seasonNumber":
+                        for opt in ses["options"]:
+                            seasons.append(opt["value"])
         episodes = []
-        for season in seasons:
-            qyerystring = (
-                "include=primaryChannel,show&filter[videoType]=EPISODE&filter[show.id]={}&filter[seasonNumber]={}&"
-                "page[size]=100&sort=seasonNumber,episodeNumber,-earliestPlayableStart".format(programid, season)
-            )
-            res = self.http.get("https://disco-api.{}/content/videos?{}".format(self.domain, qyerystring))
-            janson = res.json()
-            for i in janson["data"]:
-                if not premium and "Free" not in i["attributes"]["packages"]:
-                    continue
-                episodes.append("https://www.{}/videos/{}".format(self.domain, i["attributes"]["path"]))
-        if len(episodes) == 0:
+
+        if programid:
+            for season in seasons:
+                page = 1
+                totalpages = 1
+                while page <= totalpages:
+                    qyerystring = "decorators=viewingHistory&include=default&page[items.number]={}&&pf[seasonNumber]={}".format(page, season)
+                    res = self.http.get("https://disco-api.{}/cms/collections/{}?{}".format(self.domain, programid, qyerystring))
+                    janson = res.json()
+                    totalpages = janson["data"]["meta"]["itemsTotalPages"]
+                    for i in janson["included"]:
+                        if i["type"] != "video":
+                            continue
+                        if i["attributes"]["videoType"] == "EPISODE":
+                            if not premium and "Free" not in i["attributes"]["packages"]:
+                                continue
+                            episodes.append("https://www.{}/videos/{}".format(self.domain, i["attributes"]["path"]))
+                    page += 1
+        if not episodes:
             logging.error("Cant find any playable files")
         if config.get("all_last") > 0:
             return episodes[: config.get("all_last")]
         return episodes
 
     def _login(self):
-        url = "https://disco-api.{}/login".format(self.domain)
-        login = {"credentials": {"username": self.config.get("username"), "password": self.config.get("password")}}
-        res = self.http.post(url, json=login)
-        if res.status_code > 400:
-            return False
-        return True
+        res = self.http.get("https://disco-api.{}/users/me".format(self.domain), headers={"authority": "disco-api.{}".format(self.domain)})
+        if not res.json()["data"]["attributes"]["anonymous"]:
+            return True
+        return False
 
-    def _token(self):
+    def _token(self) -> bool:
         # random device id for cookietoken
         deviceid = hashlib.sha256(bytes(int(random.random() * 1000))).hexdigest()
         url = "https://disco-api.{}/token?realm={}&deviceId={}&shortlived=true".format(self.domain, self.domain.replace(".", ""), deviceid)
         res = self.http.get(url)
-        if res.status_code > 400:
+        if res.status_code >= 400:
             return False
         return True
+
+    def _checkpremium(self) -> bool:
+        res = self.http.get("https://disco-api.{}/users/me".format(self.domain), headers={"authority": "disco-api.{}".format(self.domain)})
+        if res.status_code < 400:
+            if "premium" in res.json()["data"]["attributes"]["products"]:
+                return True
+        return False

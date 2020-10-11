@@ -1,7 +1,5 @@
 # ex:ts=4:sw=4:sts=4:et
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
-from __future__ import absolute_import
-
 import copy
 import hashlib
 import logging
@@ -43,6 +41,8 @@ class OppetArkiv(Service, OpenGraphThumbMixin):
         if "subtitleReferences" in data:
             for i in data["subtitleReferences"]:
                 if i["format"] == "websrt":
+                    yield subtitle(copy.copy(self.config), "wrst", i["url"], output=self.output)
+                if i["format"] == "webvtt" and "url" in i:
                     yield subtitle(copy.copy(self.config), "wrst", i["url"], output=self.output)
 
         if len(data["videoReferences"]) == 0:

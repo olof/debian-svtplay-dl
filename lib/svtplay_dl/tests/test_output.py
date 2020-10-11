@@ -3,12 +3,10 @@
 # -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
 # The unittest framwork doesn't play nice with pylint:
 #   pylint: disable-msg=C0103
-from __future__ import absolute_import
-
 import unittest
+from unittest.mock import patch
 
 import svtplay_dl.utils.output
-from mock import patch
 
 
 # FIXME: use mock framework instead of this hack
