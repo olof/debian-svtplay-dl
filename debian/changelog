@@ -1,4 +1,13 @@
-svtplay-dl (2.4-3) UNRELEASED; urgency=medium
+svtplay-dl (2.7-1) unstable; urgency=medium
+
+  [ Olof Johansson ]
+  * New upstream version 2.7
+  * patch: test_postprocess: Avoid depending on network service for tests
+  * debian/control: Move debian packaging vcs to salsa
+  * debian/control: Update standards version further to 4.5.0, no
+    changes needed.
+  * debian/rules: Let dh decide how to do manual compression
+  * debian/lintian: Drop lintian override for no-upstream-changelog
 
   [ Debian Janitor ]
   * Use secure copyright file specification URI.
@@ -8,10 +17,7 @@ svtplay-dl (2.4-3) UNRELEASED; urgency=medium
     Repository-Browse.
   * Update standards version to 4.1.1, no changes needed.
 
-  [ Olof Johansson ]
-  * Update standards version further to 4.5.0, no changes needed.
-
- -- Olof Johansson <olof@ethup.se>  Wed, 06 May 2020 00:13:30 +0200
+ -- Olof Johansson <olof@ethup.se>  Wed, 11 Nov 2020 19:54:01 +0100
 
 svtplay-dl (2.4-2) unstable; urgency=medium
 
