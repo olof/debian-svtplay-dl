@@ -53,7 +53,7 @@ class Options:
         self.default = value
 
 
-def gen_parser(version='unknown'):
+def gen_parser(version="unknown"):
     parser = argparse.ArgumentParser(prog="svtplay-dl")
     general = parser.add_argument_group()
 
@@ -185,6 +185,7 @@ def gen_parser(version='unknown'):
     parser.add_argument("urls", nargs="*")
 
     return parser
+
 
 def parser(version):
     parser = gen_parser(version)

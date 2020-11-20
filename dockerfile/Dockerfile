@@ -1,6 +1,6 @@
 # using edge to get ffmpeg-4.x
 FROM alpine:edge
-MAINTAINER spaam
+LABEL maintainer="j@i19.se"
 
 COPY dist/*.whl .
 
@@ -9,7 +9,6 @@ RUN set -xe \
 	    ca-certificates \
 	    python3 \
         py3-pip \
-        rtmpdump \
         py3-cryptography \
         ffmpeg \
     && python3 -m pip install *.whl \
