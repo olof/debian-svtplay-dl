@@ -53,12 +53,6 @@ def build_docker():
         subprocess.check_call(["docker", "push", docker_name("latest")])
 
 
-def build_package():
-    logger.info("Building python package")
-
-    subprocess.check_output(["python", "setup.py", "sdist", "bdist_wheel"])
-
-
 def snapshot_folder():
     """
     Use the commit date in UTC as folder name
@@ -111,9 +105,7 @@ if not tag() and branch() != "master":
 if os.environ.get("CIBUILD") != "yes":
     sys.exit(0)
 
-build_package()
-
-if os.environ.get("OS").startswith("ubuntu"):
+if os.environ.get("OS").startswith("ubuntu") and os.environ.get("BUILD_DOCKER") == "yes":
     build_docker()
 
 aws_upload()
