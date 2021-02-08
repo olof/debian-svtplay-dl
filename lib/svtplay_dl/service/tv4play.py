@@ -22,7 +22,9 @@ class Tv4play(Service, OpenGraphThumbMixin):
             start_time_stamp = end_time_stamp - timedelta(minutes=1)
 
             url = "https://bbr-l2v.akamaized.net/live/{}/master.m3u8?in={}&out={}?".format(
-                parse.path[9:], start_time_stamp.isoformat(), end_time_stamp.isoformat()
+                parse.path[9:],
+                start_time_stamp.isoformat(),
+                end_time_stamp.isoformat(),
             )
 
             self.config.set("live", True)
@@ -63,7 +65,7 @@ class Tv4play(Service, OpenGraphThumbMixin):
             yield ServiceError("Cant find video id for the video")
             return
 
-        url = "https://playback-api.b17g.net/media/{}?service=tv4&device=browser&protocol=hls%2Cdash&drm=widevine".format(vid)
+        url = "https://playback-api.b17g.net/media/{}?service=tv4&device=browser&protocol=hls%2Cdash&drm=widevine&browser=GoogleChrome".format(vid)
         res = self.http.request("get", url, cookies=self.cookies)
         if res.status_code > 200:
             yield ServiceError("Can't play this because the video is geoblocked or not available.")

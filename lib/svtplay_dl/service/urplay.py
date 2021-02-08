@@ -17,10 +17,14 @@ class Urplay(Service, OpenGraphThumbMixin):
     supported_domains = ["urplay.se", "ur.se", "betaplay.ur.se", "urskola.se"]
 
     def get(self):
+        key = "currentProduct"
         match = re.search(r'/Player/Player" data-react-props="([^\"]+)\"', self.get_urldata())
         if not match:
-            yield ServiceError("Can't find json info")
-            return
+            key = "program"
+            match = re.search(r'/ProgramContainer" data-react-props="([^\"]+)\"', self.get_urldata())
+            if not match:
+                yield ServiceError("Can't find json info")
+                return
 
         data = unescape(match.group(1))
         jsondata = json.loads(data)
@@ -28,17 +32,19 @@ class Urplay(Service, OpenGraphThumbMixin):
         res = self.http.get("https://streaming-loadbalancer.ur.se/loadbalancer.json")
         loadbalancer = res.json()["redirect"]
 
-        for streaminfo in jsondata["currentProduct"]["streamingInfo"].keys():
-            stream = jsondata["currentProduct"]["streamingInfo"][streaminfo]
+        for streaminfo in jsondata[key]["streamingInfo"].keys():
+            stream = jsondata[key]["streamingInfo"][streaminfo]
             if streaminfo == "raw":
-                url = "https://{}/{}playlist.m3u8".format(loadbalancer, stream["sd"]["location"])
-                streams = hlsparse(self.config, self.http.request("get", url), url, output=self.output)
-                for n in list(streams.keys()):
-                    yield streams[n]
-                url = "https://{}/{}playlist.m3u8".format(loadbalancer, stream["hd"]["location"])
-                streams = hlsparse(self.config, self.http.request("get", url), url, output=self.output)
-                for n in list(streams.keys()):
-                    yield streams[n]
+                if "sd" in stream:
+                    url = "https://{}/{}playlist.m3u8".format(loadbalancer, stream["sd"]["location"])
+                    streams = hlsparse(self.config, self.http.request("get", url), url, output=self.output)
+                    for n in list(streams.keys()):
+                        yield streams[n]
+                if "hd" in stream:
+                    url = "https://{}/{}playlist.m3u8".format(loadbalancer, stream["hd"]["location"])
+                    streams = hlsparse(self.config, self.http.request("get", url), url, output=self.output)
+                    for n in list(streams.keys()):
+                        yield streams[n]
             if not (self.config.get("get_all_subtitles")) and (stream["default"]):
                 yield subtitle(copy.copy(self.config), "tt", stream["tt"]["location"], output=self.output)
 

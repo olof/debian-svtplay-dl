@@ -13,20 +13,21 @@ from svtplay_dl.subtitle import subtitle
 
 
 country = {"sv": ".se", "da": ".dk", "no": ".no"}
+REALMS = {"discoveryplus.se": "dplayse", "discoveryplus.no": "dplayno", "discoveryplus.dk": "dplaydk"}
 
 
 class Dplay(Service):
-    supported_domains = ["dplay.se", "dplay.dk", "dplay.no"]
+    supported_domains = ["discoveryplus.se", "discoveryplus.no", "discoveryplus.dk"]
 
     def get(self):
         parse = urlparse(self.url)
-        self.domain = re.search(r"(dplay\.\w\w)", parse.netloc).group(1)
+        self.domain = re.search(r"(discoveryplus\.\w\w)", parse.netloc).group(1)
 
         if not self._token():
             logging.error("Something went wrong getting token for requests")
 
         if not self._login():
-            yield ServiceError("Need the 'st' cookie to work")
+            yield ServiceError("You need the 'st' cookie from your web brower for the site to make it work")
             return
 
         channel = False
@@ -116,7 +117,7 @@ class Dplay(Service):
 
     def find_all_episodes(self, config):
         parse = urlparse(self.url)
-        self.domain = re.search(r"(dplay\.\w\w)", parse.netloc).group(1)
+        self.domain = re.search(r"(discoveryplus\.\w\w)", parse.netloc).group(1)
         programid = None
         seasons = []
         match = re.search("^/(program|programmer|videos|videoer)/([^/]+)", parse.path)
@@ -173,6 +174,8 @@ class Dplay(Service):
 
     def _login(self):
         res = self.http.get("https://disco-api.{}/users/me".format(self.domain), headers={"authority": "disco-api.{}".format(self.domain)})
+        if res.status_code >= 400:
+            return False
         if not res.json()["data"]["attributes"]["anonymous"]:
             return True
         return False
@@ -180,7 +183,7 @@ class Dplay(Service):
     def _token(self) -> bool:
         # random device id for cookietoken
         deviceid = hashlib.sha256(bytes(int(random.random() * 1000))).hexdigest()
-        url = "https://disco-api.{}/token?realm={}&deviceId={}&shortlived=true".format(self.domain, self.domain.replace(".", ""), deviceid)
+        url = "https://disco-api.{}/token?realm={}&deviceId={}&shortlived=true".format(self.domain, REALMS[self.domain], deviceid)
         res = self.http.get(url)
         if res.status_code >= 400:
             return False
