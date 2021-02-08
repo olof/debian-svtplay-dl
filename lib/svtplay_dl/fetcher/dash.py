@@ -87,7 +87,7 @@ def templateelemt(attributes, element, filename, idnumber):
         periodDuration = periodEndWC - periodStartWC
         segmentCount = math.ceil(periodDuration * attributes.get("timescale") / attributes.get("duration"))
         availableStart = math.floor(
-            (now - periodStartWC - attributes.get("timeShiftBufferDepth")) * attributes.get("timescale") / attributes.get("duration")
+            (now - periodStartWC - attributes.get("timeShiftBufferDepth")) * attributes.get("timescale") / attributes.get("duration"),
         )
         availableEnd = math.floor((now - periodStartWC) * attributes.get("timescale") / attributes.get("duration"))
         start = max(0, availableStart)
@@ -278,13 +278,15 @@ class DASH(VideoRetriever):
             raise LiveDASHException(self.url)
 
         if self.segments:
-            if self.audio:
+            if self.audio and not self.config.get("only_video"):
                 self._download2(self.audio, audio=True)
-            self._download2(self.files)
+            if not self.config.get("only_audio"):
+                self._download2(self.files)
         else:
-            if self.audio:
+            if self.audio and not self.config.get("only_video"):
                 self._download_url(self.audio, audio=True)
-            self._download_url(self.url)
+            if not self.config.get("only_audio"):
+                self._download_url(self.url)
 
     def _download2(self, files, audio=False):
         cookies = self.kwargs["cookies"]
