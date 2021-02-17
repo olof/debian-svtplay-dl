@@ -4,7 +4,7 @@ Source: https://github.com/spaam/svtplay-dl
 Upstream-Name: svtplay-dl
 
 Files: *
-Copyright: 2011-2018, Johan Andersson
+Copyright: 2011-2015, Johan Andersson <j@i19.se>
 License: Expat
 
 Files: versioneer.py
