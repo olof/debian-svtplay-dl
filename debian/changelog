@@ -1,3 +1,13 @@
+svtplay-dl (3.0-1) unstable; urgency=medium
+
+  * New upstream version 3.0
+    * Note that this version change does not signify any dramatic change
+      in svtplay-dl as compared to 2.9, despite increasing the major
+      version number.
+  * debian/control: Bump standard version to 4.5.1
+
+ -- Olof Johansson <olof@ethup.se>  Wed, 17 Feb 2021 22:21:05 +0100
+
 svtplay-dl (2.9-1) unstable; urgency=medium
 
   * New upstream version 2.9
