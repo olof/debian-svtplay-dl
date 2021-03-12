@@ -1,3 +1,9 @@
+svtplay-dl (3.0-2) unstable; urgency=medium
+
+  * Backport fixes to svtplay service support from 3.2
+
+ -- Olof Johansson <olof@ethup.se>  Fri, 12 Mar 2021 19:21:49 +0100
+
 svtplay-dl (3.0-1) unstable; urgency=medium
 
   * New upstream version 3.0
